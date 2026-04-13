@@ -28,8 +28,12 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. User can execute the training loop on Kaggle and observe convergence (decreasing loss).
   2. User can generate a virtual H&E image from an unstained patch that exhibits typical H&E colors.
-  3. User can restore a model from a checkpoint file and perform inference on a test patch.
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 02-01-PLAN.md — Model Architecture (Generator & Discriminator)
+- [ ] 02-02-PLAN.md — Training Logic & Loss Functions
+- [ ] 02-03-PLAN.md — Data Integration & Kaggle Training
+- [ ] 02-04-PLAN.md — Baseline Inference & Visualization
 
 ### Phase 3: Reliability & Hallucination Guardrails
 **Goal**: A clinically viable model that suppresses morphological hallucinations.
