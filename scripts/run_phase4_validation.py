@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import argparse
+from PIL import Image
 from src.training.lightning_module import Pix2PixLightning
 from src.data.dataset import StainingDataset, get_dataloader
 from src.validation.metrics import (
@@ -15,12 +16,23 @@ from src.validation.metrics import (
 )
 
 
+def _save_image_tensor(tensor_chw, path):
+    """Save a single [C, H, W] tensor in [0, 1] range as a PNG."""
+    arr = tensor_chw.permute(1, 2, 0).numpy()
+    arr = np.clip(arr * 255, 0, 255).astype(np.uint8)
+    Image.fromarray(arr).save(path)
+
+
 def run_comprehensive_validation(
     guarded_ckpt,
     test_csv='data/test.csv',
     output_dir='reports/phase4_validation',
     device=None,
-    batch_size=4
+    batch_size=4,
+    save_images=True,
+    virtual_dir='data/test_virtual',
+    real_dir='data/test_real',
+    unstained_dir='data/test_unstained'
 ):
     """
     Run comprehensive validation on test set.
@@ -31,6 +43,10 @@ def run_comprehensive_validation(
         output_dir: output directory for results (default 'reports/phase4_validation')
         device: 'cuda' or 'cpu' (auto-detect if None)
         batch_size: batch size for inference (default 4)
+        save_images: if True, save virtual/real/unstained PNGs for downstream scripts
+        virtual_dir: directory to cache virtual H&E predictions (default 'data/test_virtual')
+        real_dir: directory to cache real H&E ground-truth images (default 'data/test_real')
+        unstained_dir: directory to cache unstained input images (default 'data/test_unstained')
 
     Returns:
         dict with aggregated statistics (mean/std/min/max for SSIM and PSNR)
@@ -45,6 +61,12 @@ def run_comprehensive_validation(
 
     # Create output directory
     Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    # Create image cache directories
+    if save_images:
+        for d in (virtual_dir, real_dir, unstained_dir):
+            Path(d).mkdir(parents=True, exist_ok=True)
+        print(f"Image caches: {virtual_dir}, {real_dir}, {unstained_dir}")
 
     # Load test set CSV
     test_df = pd.read_csv(test_csv)
@@ -96,16 +118,22 @@ def run_comprehensive_validation(
             all_ssim.extend(ssim_scores)
             all_psnr.extend(psnr_scores)
 
-            # Store per-image results
+            # Store per-image results and optionally save images
             start_idx = batch_idx * batch_size
             for i, (ssim, psnr) in enumerate(zip(ssim_scores, psnr_scores)):
                 image_idx = start_idx + i
                 if image_idx < len(test_df):
+                    image_id = f"test_{image_idx:06d}"
                     all_results.append({
-                        'image_id': f"test_{image_idx:06d}",
+                        'image_id': image_id,
                         'ssim': ssim,
                         'psnr': psnr
                     })
+
+                    if save_images:
+                        _save_image_tensor(virtual_norm[i], Path(virtual_dir) / f"{image_id}.png")
+                        _save_image_tensor(real_norm[i], Path(real_dir) / f"{image_id}.png")
+                        _save_image_tensor(unstained_norm[i], Path(unstained_dir) / f"{image_id}.png")
 
             if (batch_idx + 1) % 10 == 0:
                 print(f"  Processed {(batch_idx + 1) * batch_size} images...")
@@ -118,6 +146,9 @@ def run_comprehensive_validation(
     results_df = pd.DataFrame(all_results)
     results_df.to_csv(csv_path, index=False)
     print(f"\nSaved metrics to {csv_path}")
+
+    if save_images:
+        print(f"Saved {len(all_results)} image triples to {virtual_dir}, {real_dir}, {unstained_dir}")
 
     # Print summary
     print(f"\n{'='*60}")
@@ -164,6 +195,36 @@ if __name__ == '__main__':
         default=4,
         help='Batch size for inference'
     )
+    parser.add_argument(
+        '--save-images',
+        action='store_true',
+        default=True,
+        help='Save virtual/real/unstained PNGs for downstream grid and error map scripts'
+    )
+    parser.add_argument(
+        '--no-save-images',
+        dest='save_images',
+        action='store_false',
+        help='Skip saving image PNGs (metrics CSV only)'
+    )
+    parser.add_argument(
+        '--virtual-dir',
+        type=str,
+        default='data/test_virtual',
+        help='Directory to cache virtual H&E predictions'
+    )
+    parser.add_argument(
+        '--real-dir',
+        type=str,
+        default='data/test_real',
+        help='Directory to cache real H&E ground-truth images'
+    )
+    parser.add_argument(
+        '--unstained-dir',
+        type=str,
+        default='data/test_unstained',
+        help='Directory to cache unstained input images'
+    )
 
     args = parser.parse_args()
 
@@ -172,5 +233,9 @@ if __name__ == '__main__':
         test_csv=args.test_csv,
         output_dir=args.output_dir,
         device=args.device,
-        batch_size=args.batch_size
+        batch_size=args.batch_size,
+        save_images=args.save_images,
+        virtual_dir=args.virtual_dir,
+        real_dir=args.real_dir,
+        unstained_dir=args.unstained_dir
     )
