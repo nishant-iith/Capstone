@@ -1,7 +1,7 @@
 # Project Roadmap: Virtual H&E Staining
 
 ## Phases
-- [ ] **Phase 1: Data Engineering & Registration** - Build a leak-free, aligned, and augmented dataset.
+- [x] **Phase 1: Data Engineering & Registration** - Build a leak-free, aligned, and augmented dataset.
 - [ ] **Phase 2: Core GAN Implementation & Training** - Establish a baseline translation model.
 - [ ] **Phase 3: Reliability & Hallucination Guardrails** - Ensure morphological accuracy and suppress hallucinations.
 - [ ] **Phase 4: Comprehensive Validation** - Quantitatively and qualitatively prove diagnostic reliability.
@@ -55,7 +55,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Data Engineering & Registration | 0/2 | Not started | - |
+| 1. Data Engineering & Registration | 2/2 | Complete | ✓ |
 | 2. Core GAN Implementation & Training | 0/0 | Not started | - |
 | 3. Reliability & Hallucination Guardrails | 0/0 | Not started | - |
 | 4. Comprehensive Validation | 0/0 | Not started | - |
