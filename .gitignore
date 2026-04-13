@@ -39,9 +39,10 @@ Thumbs.db
 # Project specific
 *.log
 .kaggle/
-data/
-models/
-checkpoints/
+/data/*
+!/data/*.csv
+/models/
+/checkpoints/
 
 # Large dataset files - excluded from git
 !Dataset/

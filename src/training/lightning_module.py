@@ -26,35 +26,36 @@ class Pix2PixLightning(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         unstained, stained = batch
 
-        # --- Train Discriminator ---
-        self.disc.train()
+        # --- Generate fake stained image ---
         fake_stained = self.gen(unstained)
 
-        # Real loss: how well it identifies real images as 1
-        real_loss = self.criterion_gan(self.disc(stained), torch.ones_like(self.disc(stained)))
-        # Fake loss: how well it identifies generated images as 0
-        fake_loss = self.criterion_gan(self.disc(fake_stained.detach()), torch.zeros_like(self.disc(fake_stained)))
+        # --- Train Discriminator ---
+        # PatchGAN takes (condition, target) — unstained is the condition
+        real_pred = self.disc(unstained, stained)
+        fake_pred = self.disc(unstained, fake_stained.detach())
 
+        real_loss = self.criterion_gan(real_pred, torch.ones_like(real_pred))
+        fake_loss = self.criterion_gan(fake_pred, torch.zeros_like(fake_pred))
         d_loss = (real_loss + fake_loss) / 2
 
         # --- Train Generator ---
-        self.gen.train()
-        # Adversarial loss: trick discriminator into seeing 1
-        g_gan_loss = self.criterion_gan(self.disc(fake_stained), torch.ones_like(self.disc(fake_stained)))
-        # L1 loss: spatial similarity to target
+        # Adversarial: fool the discriminator into predicting 1 for fake
+        fake_pred_for_g = self.disc(unstained, fake_stained)
+        g_gan_loss = self.criterion_gan(fake_pred_for_g, torch.ones_like(fake_pred_for_g))
+        # L1 loss: pixel-level similarity to ground truth
         g_l1_loss = self.criterion_l1(fake_stained, stained)
-        # Structural consistency loss: edge alignment
+        # Structural consistency: edge alignment to suppress hallucinations
         g_struct_loss = self.criterion_struct(fake_stained, stained)
 
-        # Combine all three loss terms
+        # Three-term loss (Phases 2 + 3)
         g_loss = g_gan_loss + self.hparams.lambda_l1 * g_l1_loss + self.hparams.lambda_struct * g_struct_loss
 
-        # Log all three components separately for monitoring
-        self.log("d_loss", d_loss, prog_bar=True)
-        self.log("g_loss", g_loss, prog_bar=True)
-        self.log("g_gan", g_gan_loss, prog_bar=False)
-        self.log("g_l1", g_l1_loss, prog_bar=False)
-        self.log("g_struct", g_struct_loss, prog_bar=True)
+        # Log all components
+        self.log("d_loss",    d_loss,        prog_bar=True)
+        self.log("g_loss",    g_loss,        prog_bar=True)
+        self.log("g_gan",     g_gan_loss,    prog_bar=False)
+        self.log("g_l1",      g_l1_loss,     prog_bar=False)
+        self.log("g_struct",  g_struct_loss, prog_bar=True)
 
         return {"loss": g_loss}
 
