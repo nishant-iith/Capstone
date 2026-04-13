@@ -44,5 +44,8 @@ models/
 checkpoints/
 
 # Large dataset files - excluded from git
-Dataset/Data/
+Dataset/Data/stained/
+Dataset/Data/unstained/
+Dataset/Data/tes_stain/
+Dataset/Data/tes_unstain/
 1000-20260412T223922Z-3-001/
