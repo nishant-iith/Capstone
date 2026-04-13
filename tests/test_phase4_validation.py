@@ -81,8 +81,8 @@ class TestErrorMaps:
         assert ERROR_MAP_DIR.exists(), \
             f"Error map directory not found: {ERROR_MAP_DIR}"
 
-        # List PNG files in error_maps/
-        error_map_files = list(ERROR_MAP_DIR.glob("error_heatmap_patch_*.png"))
+        # List PNG files in error_maps/ (matches both error_heatmap_patch_* and error_heatmap_<id>_*)
+        error_map_files = list(ERROR_MAP_DIR.glob("error_heatmap_*.png"))
 
         assert len(error_map_files) >= 3, \
             f"Expected >= 3 error maps, found {len(error_map_files)}"
