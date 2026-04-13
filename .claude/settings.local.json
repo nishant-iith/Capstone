@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(gsd:discuss-phase)",
+      "Bash(taskkill //F //IM git-remote-https.exe)",
+      "Bash(taskkill //F //IM git.exe)",
+      "Bash(rm -f .git/gc.pid .git/index.lock .git/*.lock)",
+      "Bash(ls .git/*.lock)"
+    ]
+  }
+}
