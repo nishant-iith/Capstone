@@ -1,0 +1,13 @@
+{
+  "project_name": "Capstone Histology",
+  "workflow": "GSD-Standard",
+  "preferred_stack": {
+    "language": "Python",
+    "framework": "PyTorch / PyTorch Lightning",
+    "cv_library": "scikit-image / OpenCV"
+  },
+  "registration_params": {
+    "method": "Phase Correlation",
+    "upsample_factor": 10
+  }
+}

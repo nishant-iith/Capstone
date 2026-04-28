@@ -1,0 +1,2 @@
+model,strategy,ssim_mean,ssim_std,psnr_mean,samples,improvement_vs_baseline
+v7-ep22,TTA,0.2696386,0.18303871,15.881678460274776,337,0.0082
