@@ -46,10 +46,10 @@ CHECKPOINT_DIR = "checkpoints/v16"
 LOG_DIR = "logs/v16"
 MODEL_PATH = "models/v16_model.pth"
 
-BATCH_SIZE = 16  # Mixed precision 16-bit + lazy loading
+BATCH_SIZE = 20  # Batch size tuned for stability
 NUM_WORKERS = 0  # Disable workers (caching in main process is better)
 MAX_EPOCHS = 200
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 5e-5  # Lower for warm-start fine-tuning
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Loss weights
@@ -141,6 +141,20 @@ def main():
     # Create models
     gen = UNetGenerator()
     disc = MultiScaleDiscriminator()
+
+    # Warm-start: Load v14 weights if available
+    v14_path = "models/v14_model.pth"
+    if os.path.exists(v14_path):
+        print(f"  Loading v14 warm-start weights: {v14_path}")
+        v14_state = torch.load(v14_path, map_location=DEVICE)
+        # Filter keys that match gen architecture
+        gen_keys = gen.state_dict().keys()
+        matching_keys = {k: v for k, v in v14_state.items() if k in gen_keys}
+        if matching_keys:
+            gen.load_state_dict(matching_keys, strict=False)
+            print(f"  ✓ Loaded {len(matching_keys)} matching layers from v14")
+        else:
+            print(f"  ✗ No matching layers found, training from scratch")
 
     # Create Lightning module
     module = GANModuleV16(
