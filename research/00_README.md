@@ -40,6 +40,14 @@ This directory contains the complete research history, all experiments, failures
 
 ---
 
+## Visual Results: v19b Virtual Staining
+
+Top 20 highest-SSIM registered pairs (0.75 → 0.72 SSIM range) — unstained → virtual stained → real stained:
+
+![v19b Showcase](showcase_images/top20_ssim_showcase.png)
+
+---
+
 ## Project Phases
 
 ```
