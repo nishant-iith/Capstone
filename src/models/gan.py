@@ -34,6 +34,43 @@ def _up_conv_norm_relu(in_ch, out_ch):
     )
 
 
+# ── Attention Gate ────────────────────────────────────────────────────────────
+
+class AttentionGate(nn.Module):
+    """
+    Soft attention gate for U-Net skip connections (Oktay et al. 2018).
+    Learns to suppress background and focus on cell structures.
+    g = gating signal (from decoder), x = skip connection (from encoder).
+    """
+    def __init__(self, f_g, f_x, f_int):
+        super().__init__()
+        self.W_g = nn.Sequential(
+            nn.Conv2d(f_g, f_int, kernel_size=1, bias=False),
+            nn.InstanceNorm2d(f_int, affine=True),
+        )
+        self.W_x = nn.Sequential(
+            nn.Conv2d(f_x, f_int, kernel_size=1, stride=2, bias=False),
+            nn.InstanceNorm2d(f_int, affine=True),
+        )
+        self.psi = nn.Sequential(
+            nn.Conv2d(f_int, 1, kernel_size=1, bias=False),
+            nn.InstanceNorm2d(1, affine=True),
+            nn.Sigmoid(),
+        )
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, g, x):
+        g1 = self.W_g(g)
+        x1 = self.W_x(x)
+        # align spatial sizes
+        if g1.shape[2:] != x1.shape[2:]:
+            g1 = F.interpolate(g1, size=x1.shape[2:], mode='bilinear', align_corners=False)
+        psi = self.relu(g1 + x1)
+        psi = self.psi(psi)
+        psi = F.interpolate(psi, size=x.shape[2:], mode='bilinear', align_corners=False)
+        return x * psi
+
+
 # ── U-Net Generator ────────────────────────────────────────────────────────────
 
 class UNetGenerator(nn.Module):
@@ -97,6 +134,13 @@ class UNetGenerator(nn.Module):
             _conv_norm_relu(1024, 1024),
         )
 
+        # ── Attention Gates ────────────────────────────────────────────────────
+        self.att4 = AttentionGate(f_g=1024, f_x=512, f_int=256)
+        self.att3 = AttentionGate(f_g=256,  f_x=256, f_int=128)
+        self.att2 = AttentionGate(f_g=128,  f_x=128, f_int=64)
+        self.att1 = AttentionGate(f_g=64,   f_x=64,  f_int=32)
+        self.att0 = AttentionGate(f_g=64,   f_x=64,  f_int=32)
+
         # ── Decoder ────────────────────────────────────────────────────────────
         # Input channels = (bottleneck or lower decoder) + skip connection
         self.up4 = _up_conv_norm_relu(1024, 512)
@@ -131,26 +175,26 @@ class UNetGenerator(nn.Module):
         # Bottleneck
         b = self.bottleneck(e4)     # 1024, H/32
 
-        # Decoder with skip connections
-        d = self.up4(b)             # 512, H/16
-        d = self._cat(d, e4)
-        d = self.dec4(d)            # 256, H/16
+        # Decoder with attention-gated skip connections
+        d = self.up4(b)                        # 512, H/16
+        d = self._cat(d, self.att4(b, e4))
+        d = self.dec4(d)                       # 256, H/16
 
-        d = self.up3(d)             # 256, H/8
-        d = self._cat(d, e3)
-        d = self.dec3(d)            # 128, H/8
+        d = self.up3(d)                        # 256, H/8
+        d = self._cat(d, self.att3(d, e3))
+        d = self.dec3(d)                       # 128, H/8
 
-        d = self.up2(d)             # 128, H/4
-        d = self._cat(d, e2)
-        d = self.dec2(d)            # 64,  H/4
+        d = self.up2(d)                        # 128, H/4
+        d = self._cat(d, self.att2(d, e2))
+        d = self.dec2(d)                       # 64,  H/4
 
-        d = self.up1(d)             # 64,  H/4 → H/2
-        d = self._cat(d, e1)
-        d = self.dec1(d)            # 64,  H/2
+        d = self.up1(d)                        # 64,  H/2
+        d = self._cat(d, self.att1(d, e1))
+        d = self.dec1(d)                       # 64,  H/2
 
-        d = self.up0(d)             # 64,  H
-        d = self._cat(d, e0)
-        d = self.dec0(d)            # 32,  H
+        d = self.up0(d)                        # 64,  H
+        d = self._cat(d, self.att0(d, e0))
+        d = self.dec0(d)                       # 32,  H
 
         return self.out_conv(d)     # 3,   H  in [-1,1]
 
