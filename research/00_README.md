@@ -3,7 +3,7 @@
 > **Project:** Histology Image Registration & Virtual Staining via Generative Deep Learning
 > **Goal:** Transform unstained microscopy images into clinically valid H&E (Hematoxylin & Eosin) stained images
 > **Current Best:** SSIM 0.7120 (v11 Weakly Supervised GAN) | Target: SSIM 0.82+ (Clinical Grade)
-> **Latest:** v17 FAILED at SSIM 0.379 (wrong-scale warm-start from v14). v18 next: ResNet-34 ImageNet encoder + MS-SSIM + no ad-hoc warm-start.
+> **Latest:** v17 rev2 IN PROGRESS (ep 8+, SSIM 0.2718 climbing) — fixed: Kaiming init, batch=20, LR=5e-4, no warm-start. v17 rev1 failed at SSIM 0.379 (wrong-scale warm-start from v14, now resolved).
 
 ---
 
@@ -46,7 +46,7 @@ This directory contains the complete research history, all experiments, failures
 Phase 1: Registration Foundation          → COMPLETE (TV-L1, +72% SSIM gain)
 Phase 2: Supervised GAN Training           → COMPLETE (v1-v7, then v8-v11)
 Phase 3: Weakly Supervised Hybrid          → COMPLETE (v11 best: 0.712 SSIM)
-Phase 4: SOTA Architecture Upgrades        → IN PROGRESS (v13-v17 evaluated; v17 failed; v18 next)
+Phase 4: SOTA Architecture Upgrades        → IN PROGRESS (v13-v17 evaluated; v17 rev2 running batch=20)
 Phase 5: Clinical Scaling                  → PENDING (target SSIM > 0.82)
 ```
 

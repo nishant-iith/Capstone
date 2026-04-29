@@ -1,6 +1,6 @@
 # 08: Results Comparison — Comprehensive Metrics & Ablations
 
-> **Bottom Line:** v11 holds the project record at SSIM **0.712 / PSNR 23.03 dB / PCC 0.8906**. v14 (0.7080) demonstrates simple architecture viability. **v17 failed at SSIM 0.379** — wrong-scale warm-start from 4-level v14 to 5-level v17. The gap to clinical target (0.82+) requires ~0.10 SSIM more — closable via ResNet-34 encoder + MS-SSIM + progressive training (see [09_future_work.md](09_future_work.md)).
+> **Bottom Line:** v11 holds the project record at SSIM **0.712 / PSNR 23.03 dB / PCC 0.8906**. v14 (0.7080) demonstrates simple architecture viability. v17 rev1 failed at SSIM 0.379 (wrong-scale warm-start). **v17 rev2 IN PROGRESS** (batch=20, Kaiming init, ep 8 SSIM 0.2718↑, ceiling ~0.62). Gap to clinical target (0.82+) closable via ResNet-34 encoder + MS-SSIM + progressive training (see [09_future_work.md](09_future_work.md)).
 
 ---
 
@@ -18,7 +18,8 @@
 | v14 | Simple 4-level U-Net | None | 3.6k patches | L1 only | 0.7080 | – | – | Clean baseline |
 | v15 | Attention U-Net | MultiScale | 3.6k patches | Hybrid + HED | 0.7199 | 17.43 | – | Diverged ep 1 |
 | v16 | Attention U-Net | MultiScale | Top-1k full | Hybrid (no HED) | 0.6976 | – | – | Diverged ep 24 |
-| v17 | Simple 5-level U-Net | None | Top-1k full | L1+SSIM | 0.3790 | – | – | ❌ Failed (warm-start) |
+| v17r1 | Simple 5-level U-Net (warm-start v14) | None | Top-1k full | L1+SSIM | 0.3790 | – | – | ❌ Failed (warm-start) |
+| v17r2 | Simple 5-level U-Net (Kaiming, batch=20) | None | Top-1k full | L1+SSIM | 0.2718+ | – | – | 🔄 IN PROGRESS |
 | v18* | + ResNet-34 + MS-SSIM | None | Top-1k full | L1+MS-SSIM+VGG | 0.76+ predicted | – | – | Recommended |
 
 *v18 is hypothetical (recommended next step).

@@ -1,6 +1,6 @@
 # 04: Training History — Complete Chronology of All 17 Versions
 
-> **Bottom Line:** Best result: **v11 = SSIM 0.712** (Weakly Supervised). v14 = SSIM 0.708 (Simple U-Net, patches). v15/v16 diverged from GAN instability. v17 **failed at SSIM 0.379** — wrong-scale warm-start from 4-level v14 to 5-level v17 was net-harmful, decoder layers loaded at wrong receptive-field scale, sigmoid saturated. Project must pivot to v18 with ResNet-34 ImageNet encoder (no ad-hoc warm-start).
+> **Bottom Line:** Best result: **v11 = SSIM 0.712** (Weakly Supervised). v14 = SSIM 0.708 (Simple U-Net, patches). v15/v16 diverged from GAN instability. v17 rev1 **failed at SSIM 0.379** — wrong-scale warm-start from 4-level v14 to 5-level v17. **v17 rev2 IN PROGRESS** — fixed: Kaiming init (no warm-start), batch=20, LR=5e-4, seeded split, val-only augment. SSIM 0.2718 at ep 8, climbing.
 
 ---
 
@@ -15,7 +15,8 @@ Phase 5 (v13):   Attention U-Net + MultiScale   → SSIM 0.6326 (data quality li
 Phase 6 (v14):   Simple U-Net + Patches         → SSIM 0.7080 (clean baseline)
 Phase 7 (v15):   v13 architecture + patches     → SSIM 0.7199 (1 epoch, then diverged)
 Phase 8 (v16):   v15 minus HED, full-size       → SSIM 0.6976 (then diverged)
-Phase 9 (v17):   5-level U-Net + SSIM + warm-start → SSIM 0.379 (FAILED)
+Phase 9 (v17r1): 5-level U-Net + SSIM + wrong warm-start → SSIM 0.379 (FAILED)
+Phase 9 (v17r2): same arch, Kaiming init, batch=20     → IN PROGRESS (ep 8, SSIM 0.2718↑)
 ```
 
 ---
@@ -229,7 +230,7 @@ $$
 
 ---
 
-### v17: Simple U-Net + L1+SSIM + Warm-Start (Current)
+### v17 Rev1: Simple U-Net + L1+SSIM + Warm-Start (FAILED)
 
 **Phase Goal:** Apply learned lessons:
 1. Simple architecture > complex unstable
@@ -282,12 +283,26 @@ loss = 0.5 * L1(pred, target) + 0.5 * (1 - SSIM(pred, target))
 5. **No seed on `random_split`** — train/val partition non-reproducible across runs.
 6. **Only 124/166 layers warm-started** — 25% of params start fresh inside an already-large model (5-level adds ~3× parameter count).
 
-**Verdict:** ❌ v17 architecture + warm-start strategy is broken. v17 abandoned.
-**Required fixes for v18:**
-- Drop warm-start from a structurally-mismatched parent, OR remap by depth not by name
-- Seed `random_split` for reproducibility
-- Augment training set only (not val)
-- Use ResNet-34 ImageNet encoder (already-pretrained at correct scales) instead of ad-hoc warm-start
+**Verdict:** ❌ v17 rev1 warm-start strategy broken. Fixes applied in rev2 (see below).
+
+---
+
+### v17 Rev2: Simple U-Net + L1+SSIM + Kaiming Init (IN PROGRESS)
+
+**Fixes applied over rev1:**
+- **No warm-start** — Kaiming init from scratch (eliminates scale mismatch)
+- **Batch=20** (up from 4) — utilizes A100 80GB headroom, 5× throughput
+- **LR=5e-4** (linear-scaled with batch, up from 1e-4)
+- **Seeded split** (seed=42) — reproducible train/val partition
+- **Val augment disabled** — pristine val SSIM signal
+
+**Current status (2026-04-29):**
+| Epoch | Val SSIM |
+|-------|----------|
+| 5     | 0.2635 |
+| 8     | **0.2718 ⭐ (best so far, climbing)** |
+
+**Trajectory:** Consistent improvement each epoch. Ceiling estimate: 0.60–0.65 (no perceptual/adversarial loss — L1+SSIM alone plateaus here). Still higher than rev1 peak.
 
 **File:** `train_v17.py`
 
@@ -307,7 +322,8 @@ loss = 0.5 * L1(pred, target) + 0.5 * (1 - SSIM(pred, target))
 | v14 | Simple U-Net | 3.6k patches (mean 0.625) | L1 only | 0.7080 | Clean baseline |
 | v15 | v13 architecture | 3.6k patches | Hybrid + HED | 0.7199 | Diverged after epoch 1 |
 | v16 | v15 minus HED | Top-1k full-size | Hybrid (no HED) | 0.6976 | Diverged after epoch 24 |
-| v17 | 5-level Simple U-Net | Top-1k full-size | L1 + SSIM | 0.3790 | ❌ Failed — wrong-scale warm-start |
+| v17r1 | 5-level Simple U-Net (warm-start v14) | Top-1k full-size | L1 + SSIM | 0.3790 | ❌ Failed — wrong-scale warm-start |
+| v17r2 | 5-level Simple U-Net (Kaiming, batch=20) | Top-1k full-size | L1 + SSIM | 0.2718+ | 🔄 IN PROGRESS (ep 8, climbing) |
 
 ---
 
