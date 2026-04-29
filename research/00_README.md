@@ -2,8 +2,8 @@
 
 > **Project:** Histology Image Registration & Virtual Staining via Generative Deep Learning
 > **Goal:** Transform unstained microscopy images into clinically valid H&E (Hematoxylin & Eosin) stained images
-> **Current Best:** SSIM 0.7120 (v11 Weakly Supervised GAN) | Target: SSIM 0.82+ (Clinical Grade)
-> **Latest:** v17 rev2 IN PROGRESS (ep 8+, SSIM 0.2718 climbing) — fixed: Kaiming init, batch=20, LR=5e-4, no warm-start. v17 rev1 failed at SSIM 0.379 (wrong-scale warm-start from v14, now resolved).
+> **Current Best:** SSIM 0.7489 (v19b ResNet-34 + L1-only, ep 80) | Target: SSIM 0.82+ (Clinical Grade)
+> **Latest:** v19b COMPLETE — SSIM 0.7489 ⭐ NEW PROJECT BEST. DenseUNet + ResNet-34 + L1 + cosine LR, 80 epochs, stable. +3.7% over v11 (0.7120).
 
 ---
 
@@ -29,13 +29,13 @@ This directory contains the complete research history, all experiments, failures
 
 | Aspect | Status |
 |--------|--------|
-| Total experiments run | 17 distinct model versions (v1 → v17) |
+| Total experiments run | 19 distinct model versions (v1 → v19b) |
 | Image registration methods evaluated | 4 (Phase Correlation, ORB, TV-L1, SyN) |
 | Loss function combinations tried | 8+ |
 | GAN architectures explored | Pix2Pix, PatchGAN, MultiScale Disc, CycleGAN (evaluated) |
 | Generator architectures | U-Net (4-level/5-level), Attention U-Net (ResNet-34 encoder) |
 | Best registered SSIM (pre-training floor) | 0.6317 (TV-L1 Optical Flow) |
-| Best model SSIM (post-training) | 0.7120 (v11 Weakly Supervised GAN) |
+| Best model SSIM (post-training) | 0.7489 (v19b DenseUNet + ResNet-34, L1-only) |
 | Dataset size | 8,885 registered pairs total; top 1,000 used (mean SSIM 0.61) |
 
 ---
@@ -46,7 +46,7 @@ This directory contains the complete research history, all experiments, failures
 Phase 1: Registration Foundation          → COMPLETE (TV-L1, +72% SSIM gain)
 Phase 2: Supervised GAN Training           → COMPLETE (v1-v7, then v8-v11)
 Phase 3: Weakly Supervised Hybrid          → COMPLETE (v11 best: 0.712 SSIM)
-Phase 4: SOTA Architecture Upgrades        → IN PROGRESS (v13-v17 evaluated; v17 rev2 running batch=20)
+Phase 4: SOTA Architecture Upgrades        → COMPLETE (v13-v19b; best: v19b SSIM 0.7489)
 Phase 5: Clinical Scaling                  → PENDING (target SSIM > 0.82)
 ```
 

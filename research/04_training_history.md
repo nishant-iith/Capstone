@@ -1,6 +1,6 @@
 # 04: Training History — Complete Chronology of All 17 Versions
 
-> **Bottom Line:** Best result: **v11 = SSIM 0.712** (Weakly Supervised). v14 = SSIM 0.708 (Simple U-Net, patches). v15/v16 diverged from GAN instability. v17 rev1 **failed at SSIM 0.379** — wrong-scale warm-start from 4-level v14 to 5-level v17. **v17 rev2 IN PROGRESS** — fixed: Kaiming init (no warm-start), batch=20, LR=5e-4, seeded split, val-only augment. SSIM 0.2718 at ep 8, climbing.
+> **Bottom Line:** Best result: **v19b = SSIM 0.7489** (DenseUNet + ResNet-34, L1-only, ep 80, stable). v11 prior best 0.712. v19 (full loss) diverged. v17r1 failed warm-start. v17r2 abandoned (ceiling ~0.62). Next: add MS-SSIM + VGG to v19b arch → target 0.77+.
 
 ---
 
@@ -15,8 +15,10 @@ Phase 5 (v13):   Attention U-Net + MultiScale   → SSIM 0.6326 (data quality li
 Phase 6 (v14):   Simple U-Net + Patches         → SSIM 0.7080 (clean baseline)
 Phase 7 (v15):   v13 architecture + patches     → SSIM 0.7199 (1 epoch, then diverged)
 Phase 8 (v16):   v15 minus HED, full-size       → SSIM 0.6976 (then diverged)
-Phase 9 (v17r1): 5-level U-Net + SSIM + wrong warm-start → SSIM 0.379 (FAILED)
-Phase 9 (v17r2): same arch, Kaiming init, batch=20     → IN PROGRESS (ep 8, SSIM 0.2718↑)
+Phase 9  (v17r1): 5-level U-Net + SSIM + wrong warm-start → SSIM 0.379 (FAILED)
+Phase 9  (v17r2): same arch, Kaiming init, batch=20     → abandoned (ceiling ~0.62)
+Phase 10 (v19):   DenseUNet + ResNet-34 + L1+MS-SSIM+VGG → diverged (FAILED)
+Phase 10 (v19b):  DenseUNet + ResNet-34 + L1 only        → SSIM 0.7489 ⭐ NEW BEST
 ```
 
 ---
@@ -323,7 +325,41 @@ loss = 0.5 * L1(pred, target) + 0.5 * (1 - SSIM(pred, target))
 | v15 | v13 architecture | 3.6k patches | Hybrid + HED | 0.7199 | Diverged after epoch 1 |
 | v16 | v15 minus HED | Top-1k full-size | Hybrid (no HED) | 0.6976 | Diverged after epoch 24 |
 | v17r1 | 5-level Simple U-Net (warm-start v14) | Top-1k full-size | L1 + SSIM | 0.3790 | ❌ Failed — wrong-scale warm-start |
-| v17r2 | 5-level Simple U-Net (Kaiming, batch=20) | Top-1k full-size | L1 + SSIM | 0.2718+ | 🔄 IN PROGRESS (ep 8, climbing) |
+| v17r2 | 5-level Simple U-Net (Kaiming, batch=20) | Top-1k full-size | L1 + SSIM | ~0.60 ceiling | ❌ Abandoned — ceiling too low |
+| v19 | DenseUNet + ResNet-34 | Top-1k full-size | L1+MS-SSIM+VGG | diverged | ❌ Failed |
+| **v19b** ⭐ | **DenseUNet + ResNet-34** | **Top-1k full-size** | **L1 only** | **0.7489** | **✅ PROJECT BEST** |
+
+---
+
+### v19b: DenseUNet + ResNet-34 + L1-Only (PROJECT BEST)
+
+**Phase Goal:** Apply v19 arch with stable L1-only loss (v19 full-loss diverged)
+**Data:** Top-1000 full-size pairs (mean SSIM 0.6094)
+**Architecture:** `smp.Unet(encoder_name="resnet34", encoder_weights="imagenet")` — ImageNet pretrained encoder, sigmoid output
+**Loss:** **L1 ONLY** — simplicity → stability
+**Hyperparameters:**
+- Batch: 8, LR: 1e-4, AdamW (weight_decay=1e-4)
+- Schedule: CosineAnnealingLR (T_max=80, eta_min=1e-7)
+- Epochs: 80, patience: 15, grad clip: 1.0
+- Mixed precision AMP, cuDNN benchmark
+
+**Training Curve:**
+
+| Epoch | Val SSIM |
+|-------|----------|
+| 1 | 0.6467 |
+| 5 | 0.7226 |
+| 17 | 0.7394 |
+| 40 | 0.7462 |
+| 61 | 0.7484 |
+| 76 | 0.7486 |
+| **80** | **0.7489 ⭐** |
+
+**Behavior:** Monotonic improvement, no divergence. Loss declined 0.1938 → 0.0301. Cosine LR kept squeezing gains to final epoch.
+
+**Verdict:** ✅ **PROJECT BEST SSIM 0.7489** — +3.7% over v11 (0.712). Confirms: ResNet-34 encoder + L1 + cosine LR = stable high-quality baseline. Next step: add MS-SSIM + VGG perceptual losses.
+
+**File:** `train_v19b.py`, model: `models/v19b_model.pth`, best ckpt: `checkpoints/v19b/v19b_e080_ssim0.7489.pth`
 
 ---
 
@@ -331,9 +367,10 @@ loss = 0.5 * L1(pred, target) + 0.5 * (1 - SSIM(pred, target))
 
 1. **TV-L1 Registration (Phase 1):** SSIM 0.26 → 0.65 (+0.39, 150% gain)
 2. **Mixed Precision + RAM Cache:** Throughput 0.8 → 1.3 it/s (+62%)
-3. **VGG-19 Perceptual Loss (v11):** SSIM 0.706 → 0.712 (+0.006, project best)
+3. **VGG-19 Perceptual Loss (v11):** SSIM 0.706 → 0.712 (+0.006)
 4. **Data Curation (v14):** All-pairs (0.51 mean) → curated patches (0.625 mean) → SSIM 0.6326 → 0.7080
 5. **GAN Removal (v17):** Stability over architectural complexity
+6. **ResNet-34 encoder + cosine LR (v19b):** SSIM 0.712 → 0.7489 (+0.037, new project best)
 
 ---
 

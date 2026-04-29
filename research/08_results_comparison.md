@@ -1,6 +1,6 @@
 # 08: Results Comparison — Comprehensive Metrics & Ablations
 
-> **Bottom Line:** v11 holds the project record at SSIM **0.712 / PSNR 23.03 dB / PCC 0.8906**. v14 (0.7080) demonstrates simple architecture viability. v17 rev1 failed at SSIM 0.379 (wrong-scale warm-start). **v17 rev2 IN PROGRESS** (batch=20, Kaiming init, ep 8 SSIM 0.2718↑, ceiling ~0.62). Gap to clinical target (0.82+) closable via ResNet-34 encoder + MS-SSIM + progressive training (see [09_future_work.md](09_future_work.md)).
+> **Bottom Line:** v19b holds the project record at SSIM **0.7489** (ep 80, stable, no divergence). v11 previous best 0.7120. v14 (0.7080) simple baseline. v17r1 failed (warm-start). v17r2 abandoned (ceiling ~0.62). Gap to clinical target (0.82+) closable via MS-SSIM + VGG perceptual + better registration (see [09_future_work.md](09_future_work.md)).
 
 ---
 
@@ -12,17 +12,19 @@
 | v8 | ResNet-34 U-Net | 70×70 | TV-L1 1k | L1+WGAN-GP | 0.65 | – | – | OK |
 | v9 | + augmentation | 70×70 | TV-L1 1k | L1+WGAN-GP | 0.68 | – | – | OK |
 | v10 | Pix2Pix Turbo | 70×70 | TV-L1 1k | L1+WGAN-GP | 0.706 | 22.75 | – | Good |
-| **v11** ⭐ | **+ VGG-19 + Sobel** | **70×70** | **TV-L1 1k** | **Hybrid** | **0.7120** | **23.03** | **0.8906** | **PROJECT BEST** |
+| v11 | + VGG-19 + Sobel | 70×70 | TV-L1 1k | Hybrid | 0.7120 | 23.03 | 0.8906 | Prior Best |
 | v12 | + HED | 70×70 | TV-L1 1k | + HED | (failed) | – | – | Diverged |
 | v13 | Attention U-Net | MultiScale | TV-L1 8.8k (mean 0.51) | Hybrid + HED | 0.6326 | – | – | Data limited |
 | v14 | Simple 4-level U-Net | None | 3.6k patches | L1 only | 0.7080 | – | – | Clean baseline |
 | v15 | Attention U-Net | MultiScale | 3.6k patches | Hybrid + HED | 0.7199 | 17.43 | – | Diverged ep 1 |
 | v16 | Attention U-Net | MultiScale | Top-1k full | Hybrid (no HED) | 0.6976 | – | – | Diverged ep 24 |
 | v17r1 | Simple 5-level U-Net (warm-start v14) | None | Top-1k full | L1+SSIM | 0.3790 | – | – | ❌ Failed (warm-start) |
-| v17r2 | Simple 5-level U-Net (Kaiming, batch=20) | None | Top-1k full | L1+SSIM | 0.2718+ | – | – | 🔄 IN PROGRESS |
-| v18* | + ResNet-34 + MS-SSIM | None | Top-1k full | L1+MS-SSIM+VGG | 0.76+ predicted | – | – | Recommended |
+| v17r2 | Simple 5-level U-Net (Kaiming, batch=20) | None | Top-1k full | L1+SSIM | ~0.60 ceiling | – | – | ❌ Abandoned (ceiling too low) |
+| v19 | DenseUNet + ResNet-34 | None | Top-1k full | L1+MS-SSIM+VGG | diverged | – | – | ❌ Failed |
+| **v19b** ⭐ | **DenseUNet + ResNet-34** | **None** | **Top-1k full** | **L1 only** | **0.7489** | **–** | **–** | **PROJECT BEST** |
+| v20* | + MS-SSIM + VGG perceptual | None | Top-1k full | L1+MS-SSIM+VGG | 0.77+ predicted | – | – | Recommended |
 
-*v18 is hypothetical (recommended next step).
+*v20 is hypothetical (recommended next step).
 
 ---
 
@@ -30,19 +32,19 @@
 
 ```
 0.80 ┤
-0.75 ┤                                                  ┌── v18* target
-0.70 ┤                          ⭐ v11 ──── v14 ── v15 ─┤
+0.75 ┤                                                            ⭐ v19b (0.7489)
+0.70 ┤                          v11 ──── v14 ── v15 ─────────────┘
 0.65 ┤              v8─v9─v10 ──┘          v13          v16
 0.60 ┤
 0.55 ┤
 0.50 ┤
 0.45 ┤
 0.40 ┤
-0.35 ┤
-0.30 ┤
+0.35 ┤                                                       v17r1
+0.30 ┤                                                       v17r2↑
 0.25 ┤  v1-7 ──┐
-     └─────────┴────────┴────────┴────────┴────────┴────────┴────
-       Phase1  Phase2   Phase3   Phase4   Phase5   Phase6   v17
+     └─────────┴────────┴────────┴────────┴────────┴────────┴────────
+       Phase1  Phase2   Phase3   Phase4   Phase5   Phase6   v17  v19b
        (UnReg) (Reg)    (Percept)(HED)   (DataExp) (Stable)
 ```
 
