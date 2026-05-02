@@ -1,0 +1,1149 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Virtual H&E Staining Capstone Progress Report</title>
+<style>
+@page {
+  size: A4;
+  margin: 18mm 15mm 18mm 15mm;
+  @bottom-center {
+    content: "Virtual H&E Staining Capstone Progress Report - Page " counter(page);
+    font-size: 8.5pt;
+    color: #666;
+  }
+}
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  color: #1f2933;
+  font-size: 10.5pt;
+  line-height: 1.48;
+}
+h1 {
+  font-size: 26pt;
+  color: #12355b;
+  margin: 0 0 14pt 0;
+  padding-bottom: 10pt;
+  border-bottom: 3px solid #2f80ed;
+}
+h2 {
+  font-size: 17pt;
+  color: #12355b;
+  margin-top: 22pt;
+  padding-top: 4pt;
+  border-top: 1px solid #d8e2ef;
+}
+h3 {
+  font-size: 12.5pt;
+  color: #264b73;
+  margin-top: 14pt;
+}
+p {
+  margin: 7pt 0;
+}
+blockquote {
+  border-left: 4px solid #2f80ed;
+  margin: 10pt 0;
+  padding: 6pt 10pt;
+  background: #f3f8ff;
+}
+code {
+  font-family: "Courier New", monospace;
+  background: #f4f4f4;
+  padding: 1pt 3pt;
+  border-radius: 3px;
+}
+pre {
+  background: #f4f4f4;
+  border: 1px solid #ddd;
+  padding: 8pt;
+  white-space: pre-wrap;
+  font-size: 9pt;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 9pt 0 13pt 0;
+  font-size: 9.2pt;
+}
+th {
+  background: #eaf2ff;
+  color: #12355b;
+  font-weight: 700;
+}
+th, td {
+  border: 1px solid #c9d6e2;
+  padding: 5pt 6pt;
+  vertical-align: top;
+}
+tr:nth-child(even) td {
+  background: #fbfdff;
+}
+hr {
+  border: none;
+  border-top: 1px solid #d8e2ef;
+  margin: 16pt 0;
+}
+.wide-img {
+  width: 100%;
+  height: auto;
+  border: 1px solid #c9d6e2;
+  margin-top: 8pt;
+}
+a {
+  color: #1b66b1;
+  text-decoration: none;
+}
+</style>
+</head>
+<body>
+<h1 id="virtual-he-staining-capstone-project">Virtual H&amp;E Staining Capstone Project</h1>
+<h2 id="detailed-progress-report-from-early-experiments-to-final-model">Detailed Progress Report From Early Experiments to Final Model</h2>
+<p><strong>Institution:</strong> Indian Institute of Technology Hyderabad
+<strong>Department:</strong> Biomedical Engineering
+<strong>Professor:</strong> Prof. Renu John
+<strong>Teaching Assistant:</strong> Sarfaraz
+<strong>Group Members:</strong> Nishant and Arin
+<strong>Report Date:</strong> 2 May 2026</p>
+<hr>
+<h2 id="how-to-read-this-report">How to Read This Report</h2>
+<p>This report is written for a first-year college student who may not already know deep learning, histology, or medical image registration. The goal is to explain the project in simple language while still giving enough technical detail to defend the work in a review or presentation.</p>
+<p>The project goal was to build a system that takes an unstained tissue microscopy image and predicts how the same tissue would look after H&amp;E staining. H&amp;E means Hematoxylin and Eosin. In normal pathology, Hematoxylin stains cell nuclei purple-blue and Eosin stains cytoplasm and extracellular tissue pink. Here, instead of physically staining the sample, we train a model to create a virtual H&amp;E image from the unstained image.</p>
+<p>The final best system is not one single trick. It is the result of many decisions: better image registration, better data filtering, stronger neural network backbones, simpler losses, clean validation splits, test-time augmentation, and a final ensemble. This report explains why each decision was made and why some earlier ideas were stopped.</p>
+<hr>
+<h2 id="executive-summary">Executive Summary</h2>
+<p>The final project pipeline is:</p>
+<pre><code class="language-text">Unstained image pair data
+-&gt; CLAHE-driven TV-L1 non-rigid registration
+-&gt; content-quality top-1000 training selection
+-&gt; v20/v22A/v21B model family
+-&gt; 4-flip test-time augmentation
+-&gt; weighted final ensemble
+-&gt; desktop/CLI staining app
+</code></pre>
+<p>The final recommended model mode is the <strong>balanced ensemble</strong>:</p>
+<pre><code class="language-text">0.20 * v20_fixed TTA4
+0.60 * v22A content-quality TTA4
+0.20 * v21B Hibou-B content-quality TTA4
+</code></pre>
+<p>On the final fixed CLAHE validation set, this scored:</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th style="text-align: right;">Final Balanced Ensemble</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SSIM</td>
+<td style="text-align: right;">0.7838</td>
+</tr>
+<tr>
+<td>PSNR</td>
+<td style="text-align: right;">25.16 dB</td>
+</tr>
+<tr>
+<td>PCC</td>
+<td style="text-align: right;">0.8794</td>
+</tr>
+</tbody>
+</table>
+<p>These numbers come from the project file <code>logs/final_v21b_v22a_eval_summary.txt</code> and are also recorded in <code>best_model_manifest.json</code> [P1, P2].</p>
+<p>The best single model on the same CLAHE fixed validation set was <strong>v22A TTA4</strong>, with:</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th style="text-align: right;">v22A TTA4</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SSIM</td>
+<td style="text-align: right;">0.7807</td>
+</tr>
+<tr>
+<td>PSNR</td>
+<td style="text-align: right;">25.16 dB</td>
+</tr>
+<tr>
+<td>PCC</td>
+<td style="text-align: right;">0.8782</td>
+</tr>
+</tbody>
+</table>
+<p>The final ensemble only improved slightly over v22A alone, but the improvement was consistent enough to keep it as the highest-quality internal mode. For a simpler public app, v22A-only or v20-only remains easier to distribute because v21B depends on the Hibou-B model files.</p>
+<p>The most important lesson from the project is simple:</p>
+<blockquote>
+<p>In virtual staining, better alignment and cleaner data mattered more than adding complicated GAN losses.</p>
+</blockquote>
+<p>The early models failed mostly because the unstained and stained images were not perfectly aligned. Later models improved because registration and data quality improved. The best final result came from combining a strong ConvNeXt-based model with better registered CLAHE data and a small ensemble.</p>
+<hr>
+<h2 id="beginner-friendly-glossary">Beginner-Friendly Glossary</h2>
+<p><strong>Histology</strong> means studying tissue under a microscope.</p>
+<p><strong>H&amp;E staining</strong> is a common staining method used in pathology. It colors nuclei and tissue structures so doctors can inspect them.</p>
+<p><strong>Virtual staining</strong> means using a computer model to predict a stained-looking image from an unstained image.</p>
+<p><strong>Registration</strong> means aligning two images of the same tissue so the same cell appears in the same place in both images.</p>
+<p><strong>Non-rigid registration</strong> means the alignment can bend and stretch locally, not just shift the whole image left or right.</p>
+<p><strong>Optical flow</strong> estimates how each pixel should move from one image to another. TV-L1 optical flow is a robust optical-flow method that uses total variation smoothing and L1 brightness error [R1].</p>
+<p><strong>CLAHE</strong> means Contrast Limited Adaptive Histogram Equalization. It improves local contrast in an image without letting noise become too strong [R9].</p>
+<p><strong>U-Net</strong> is a neural network architecture widely used in biomedical image segmentation and image-to-image problems because it keeps both high-level context and fine spatial details [R3].</p>
+<p><strong>Pix2Pix</strong> is a conditional GAN framework for image-to-image translation. It learns a mapping from an input image to an output image [R4].</p>
+<p><strong>GAN</strong> means Generative Adversarial Network. It trains a generator and a discriminator against each other. GANs can make images look sharper, but they can also become unstable.</p>
+<p><strong>L1 loss</strong> measures average absolute pixel error. It is simple and stable.</p>
+<p><strong>Perceptual loss</strong> compares deep features instead of raw pixels. VGG-19 features are often used for this because VGG networks learned useful visual features on ImageNet [R8].</p>
+<p><strong>SSIM</strong> means Structural Similarity Index. It measures how similar two images are in structure, contrast, and brightness. It is often better than pure pixel error for image quality [R2].</p>
+<p><strong>PSNR</strong> means Peak Signal-to-Noise Ratio. Higher PSNR usually means lower pixel-level error.</p>
+<p><strong>PCC</strong> means Pearson Correlation Coefficient. It measures how strongly two images vary together.</p>
+<p><strong>TTA</strong> means Test-Time Augmentation. In this project, TTA4 means predicting the image four times using flips, then flipping predictions back and averaging them.</p>
+<p><strong>Ensemble</strong> means combining predictions from multiple models. Ensembles often improve reliability because different models make slightly different errors.</p>
+<hr>
+<h2 id="1-problem-statement">1. Problem Statement</h2>
+<p>The project tries to answer this question:</p>
+<blockquote>
+<p>Can we generate a realistic H&amp;E-stained image from an unstained tissue image using deep learning?</p>
+</blockquote>
+<p>This is useful because physical staining takes time, chemicals, and tissue handling. A virtual staining model could help create a fast preview, reduce repeated staining, or support computational pathology workflows. It does not replace clinical validation, but it can be a strong research step.</p>
+<p>The task is difficult because the input and output images are not just different colors. During staining, the tissue can move, stretch, compress, or slightly deform. If the input unstained image and target stained image are not aligned, a model gets contradictory training signals. For example, the model may see a nucleus at location <code>(x, y)</code> in the input but the target nucleus is shifted 20 pixels away. The model is then punished even if it predicted the correct biological structure in the wrong position.</p>
+<p>This is why registration became the foundation of the project. Without registration, the model learns blur. With registration, the model can learn staining.</p>
+<hr>
+<h2 id="2-what-data-the-project-used">2. What Data the Project Used</h2>
+<p>The project used paired microscopy patches. Each pair contains:</p>
+<ol>
+<li>an unstained tissue image, and</li>
+<li>the corresponding H&amp;E stained image.</li>
+</ol>
+<p>The pairs are related, but they are not naturally pixel-perfect. Tissue processing and microscope repositioning cause mismatch.</p>
+<p>The project eventually worked with <strong>8,885 registered pairs</strong> after running full registration pipelines. Different training subsets were created from these pairs:</p>
+<table>
+<thead>
+<tr>
+<th>Data subset</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>All registered pairs</td>
+<td>Useful for global statistics, but includes low-quality alignments</td>
+</tr>
+<tr>
+<td>Top-1000 by registration score</td>
+<td>Higher-quality aligned training subset</td>
+</tr>
+<tr>
+<td>Content-quality top-1000</td>
+<td>Final stronger subset balancing registration quality and tissue information</td>
+</tr>
+<tr>
+<td>Fixed same-prefix validation set</td>
+<td>Fair final comparison across models</td>
+</tr>
+</tbody>
+</table>
+<p>The final model claim uses a fixed validation protocol instead of relying only on internal training validation. This matters because some earlier results were later found to have overlapping train/validation prefixes. Those earlier results were useful for learning, but they should not be presented as clean final validation.</p>
+<hr>
+<h2 id="3-why-registration-was-the-first-big-challenge">3. Why Registration Was the First Big Challenge</h2>
+<p>Imagine tracing a drawing on butter paper. If the paper moves while you are tracing, your drawing looks wrong even if your hand is good. The same thing happens in virtual staining. The model can only learn well if the input and target are aligned.</p>
+<p>At the beginning, the model was trained on unregistered data. The result was poor:</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th style="text-align: right;">SSIM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>v1-v7, unregistered Pix2Pix</td>
+<td style="text-align: right;">about 0.26</td>
+</tr>
+</tbody>
+</table>
+<p>The images looked like blurry pink-purple regions instead of clean cell structures. This was not mainly a model problem. It was a data-alignment problem.</p>
+<p>The team tested multiple registration methods:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>What it can do</th>
+<th>Why it failed or worked</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Phase correlation</td>
+<td>Global shift only</td>
+<td>Too simple for tissue stretching</td>
+</tr>
+<tr>
+<td>ORB feature matching</td>
+<td>Feature-based alignment</td>
+<td>Failed because nuclei look repetitive and cross-modal features differ</td>
+</tr>
+<tr>
+<td>SyN/windowed SyN</td>
+<td>Advanced deformable registration</td>
+<td>More complex and not clearly better for this pipeline</td>
+</tr>
+<tr>
+<td>TV-L1 optical flow</td>
+<td>Dense non-rigid alignment</td>
+<td>Worked best historically</td>
+</tr>
+<tr>
+<td>CLAHE-driven TV-L1</td>
+<td>TV-L1 with better contrast drivers</td>
+<td>Best final registration path</td>
+</tr>
+</tbody>
+</table>
+<p>TV-L1 optical flow was chosen because it estimates a motion vector for each pixel, so it can model local tissue deformation. This matches the biological reality: tissue does not only shift; it bends and stretches. The method is based on a variational optical-flow formulation using total variation regularization and L1 data fidelity [R1].</p>
+<hr>
+<h2 id="4-why-clahe-improved-registration">4. Why CLAHE Improved Registration</h2>
+<p>The original TV-L1 registration used grayscale images to estimate the optical flow. That helped a lot, but grayscale unstained and grayscale H&amp;E images still do not always have the same contrast. Some structures are clearer in one domain than the other.</p>
+<p>CLAHE was introduced as a preprocessing step only for estimating the registration flow. CLAHE increases local contrast in a controlled way. It helps the optical-flow algorithm see tissue edges and nuclei-like structures more clearly. It was not used as an inference-time image enhancement step in the final app. In other words:</p>
+<pre><code class="language-text">CLAHE is used to help align image pairs during data preparation.
+CLAHE is not applied to a single user image inside the app.
+</code></pre>
+<p>The improvement was large:</p>
+<table>
+<thead>
+<tr>
+<th>Registration Dataset</th>
+<th style="text-align: right;">All-Pair Mean SSIM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Old gray TV-L1</td>
+<td style="text-align: right;">0.4134</td>
+</tr>
+<tr>
+<td>CLAHE TV-L1</td>
+<td style="text-align: right;">0.5045</td>
+</tr>
+<tr>
+<td>Mean gain</td>
+<td style="text-align: right;">+0.0911</td>
+</tr>
+</tbody>
+</table>
+<p>For the top-1000 registered pairs:</p>
+<table>
+<thead>
+<tr>
+<th>Dataset</th>
+<th style="text-align: right;">Top-1000 Mean SSIM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Old gray TV-L1</td>
+<td style="text-align: right;">0.6094</td>
+</tr>
+<tr>
+<td>CLAHE TV-L1</td>
+<td style="text-align: right;">0.6423</td>
+</tr>
+</tbody>
+</table>
+<p>This was one of the most important discoveries in the project. It showed that the model was limited not only by architecture, but by label quality. Better aligned target images gave the learning system a clearer signal.</p>
+<hr>
+<h2 id="5-metrics-used-in-the-project">5. Metrics Used in the Project</h2>
+<p>The project mainly tracked SSIM, PSNR, and PCC.</p>
+<h3 id="51-ssim">5.1 SSIM</h3>
+<p>SSIM compares local image structure, contrast, and brightness. It was introduced by Wang, Bovik, Sheikh, and Simoncelli as a quality metric closer to human visual perception than simple error measures [R2]. In this project, SSIM is the most important number because virtual staining must preserve tissue structure.</p>
+<h3 id="52-psnr">5.2 PSNR</h3>
+<p>PSNR is based on mean squared error. It is useful for measuring pixel-level closeness. However, a model can have decent PSNR and still look biologically wrong if structures are shifted or blurred.</p>
+<h3 id="53-pcc">5.3 PCC</h3>
+<p>PCC measures correlation. In simple words, it checks whether bright and dark patterns rise and fall together between prediction and target. This is useful for biological texture consistency.</p>
+<h3 id="54-why-we-did-not-trust-one-metric-alone">5.4 Why we did not trust one metric alone</h3>
+<p>No single metric is perfect. SSIM is important for structure, PSNR is useful for pixel accuracy, and PCC helps evaluate pattern correlation. The final default ensemble was chosen because it tied the best SSIM and improved PSNR/PCC:</p>
+<table>
+<thead>
+<tr>
+<th>Final Mode</th>
+<th style="text-align: right;">SSIM</th>
+<th style="text-align: right;">PSNR</th>
+<th style="text-align: right;">PCC</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0.30 v20 + 0.50 v22A + 0.20 v21B</td>
+<td style="text-align: right;">0.7838</td>
+<td style="text-align: right;">25.08</td>
+<td style="text-align: right;">0.8789</td>
+</tr>
+<tr>
+<td>0.20 v20 + 0.60 v22A + 0.20 v21B</td>
+<td style="text-align: right;">0.7838</td>
+<td style="text-align: right;">25.16</td>
+<td style="text-align: right;">0.8794</td>
+</tr>
+</tbody>
+</table>
+<p>Because both modes tied on SSIM, the second one became the default.</p>
+<hr>
+<h2 id="6-timeline-of-model-versions">6. Timeline of Model Versions</h2>
+<p>The project did not jump directly to the final model. It went through many versions. Each version taught something.</p>
+<table>
+<thead>
+<tr>
+<th>Version</th>
+<th>Main Idea</th>
+<th style="text-align: right;">Result</th>
+<th>Lesson</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>v1-v7</td>
+<td>Pix2Pix on unregistered data</td>
+<td style="text-align: right;">about 0.26 SSIM</td>
+<td>Registration is required</td>
+</tr>
+<tr>
+<td>v8-v10</td>
+<td>Pix2Pix after TV-L1 registration</td>
+<td style="text-align: right;">up to 0.706 SSIM</td>
+<td>Registration unlocks learning</td>
+</tr>
+<tr>
+<td>v11</td>
+<td>Add VGG perceptual and Sobel losses</td>
+<td style="text-align: right;">0.712 SSIM</td>
+<td>Perceptual signal helps but has a ceiling</td>
+</tr>
+<tr>
+<td>v12</td>
+<td>Add HED stain loss</td>
+<td style="text-align: right;">Failed</td>
+<td>More losses can conflict</td>
+</tr>
+<tr>
+<td>v13</td>
+<td>Attention U-Net + more data</td>
+<td style="text-align: right;">0.6326 SSIM</td>
+<td>More data can hurt if quality is lower</td>
+</tr>
+<tr>
+<td>v14</td>
+<td>Simpler U-Net, curated patches</td>
+<td style="text-align: right;">0.7080 SSIM</td>
+<td>Simplicity and data quality help</td>
+</tr>
+<tr>
+<td>v15</td>
+<td>Attention U-Net on patches</td>
+<td style="text-align: right;">0.7199 then diverged</td>
+<td>Complex GAN training unstable</td>
+</tr>
+<tr>
+<td>v16</td>
+<td>Remove HED, full-size top-1k</td>
+<td style="text-align: right;">0.6976 then diverged</td>
+<td>Still unstable</td>
+</tr>
+<tr>
+<td>v17</td>
+<td>5-level U-Net + SSIM loss</td>
+<td style="text-align: right;">0.379 or low ceiling</td>
+<td>Wrong warm-start and loss choices can break learning</td>
+</tr>
+<tr>
+<td>v19</td>
+<td>DenseUNet + complex losses</td>
+<td style="text-align: right;">Diverged</td>
+<td>Complex loss stack not reliable</td>
+</tr>
+<tr>
+<td>v19b</td>
+<td>ResNet-34 U-Net + L1 only</td>
+<td style="text-align: right;">0.7489 leaky split</td>
+<td>L1-only is stable, but split was not clean</td>
+</tr>
+<tr>
+<td>v20</td>
+<td>ConvNeXt U-Net + L1</td>
+<td style="text-align: right;">0.7549 leaky split</td>
+<td>Strong encoder helps</td>
+</tr>
+<tr>
+<td>v20_fixed</td>
+<td>Clean split v20</td>
+<td style="text-align: right;">0.7606 clean</td>
+<td>Clean validation confirmed strength</td>
+</tr>
+<tr>
+<td>v21A</td>
+<td>Hibou-B frozen feature decoder</td>
+<td style="text-align: right;">0.7605 clean</td>
+<td>Histology encoder matched but did not beat v20</td>
+</tr>
+<tr>
+<td>v22A</td>
+<td>v20 warm-start on CLAHE content-quality data</td>
+<td style="text-align: right;">0.7807 fixed CLAHE TTA</td>
+<td>Better data improves final eval</td>
+</tr>
+<tr>
+<td>v21B</td>
+<td>Hibou-B on CLAHE content-quality data</td>
+<td style="text-align: right;">0.7790 fixed CLAHE TTA</td>
+<td>Useful ensemble complement</td>
+</tr>
+<tr>
+<td>Final</td>
+<td>Weighted v20/v22A/v21B TTA ensemble</td>
+<td style="text-align: right;">0.7838 SSIM</td>
+<td>Best overall pipeline</td>
+</tr>
+</tbody>
+</table>
+<p>This timeline shows a clear pattern. Early progress came from registration. Middle progress came from stabilizing the learning setup. Final progress came from stronger encoders, better validation discipline, and improved registration/data selection.</p>
+<hr>
+<h2 id="7-early-pix2pix-experiments-why-they-were-not-enough">7. Early Pix2Pix Experiments: Why They Were Not Enough</h2>
+<p>Pix2Pix is a famous image-to-image translation framework. It trains a generator to create an output image and a discriminator to judge whether the output looks real [R4]. This idea is natural for virtual staining because the input is one image type and the output is another image type.</p>
+<p>The early v1-v7 experiments used a Pix2Pix-style U-Net generator and PatchGAN discriminator. The setup was reasonable, but the data was not aligned enough. Because of that, the model learned blurry averages instead of sharp biology.</p>
+<p>This taught the first major lesson:</p>
+<blockquote>
+<p>A powerful image-to-image model cannot fix badly aligned supervision.</p>
+</blockquote>
+<p>When the target image is shifted away from the input image, pixel losses and adversarial losses push the model in conflicting directions. The generator tries to satisfy impossible training examples, so the safest prediction becomes a smooth average.</p>
+<hr>
+<h2 id="8-v8-v10-registration-unlocks-the-first-good-result">8. v8-v10: Registration Unlocks the First Good Result</h2>
+<p>After TV-L1 registration, the Pix2Pix-style model improved sharply. v10 used a WGAN-GP style adversarial setup, which is a more stable version of Wasserstein GAN training that adds a gradient penalty [R6]. v10 reached about:</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th style="text-align: right;">v10</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SSIM</td>
+<td style="text-align: right;">0.706</td>
+</tr>
+<tr>
+<td>PSNR</td>
+<td style="text-align: right;">22.75 dB</td>
+</tr>
+</tbody>
+</table>
+<p>This was the first sign that the project was on the right track. The model architecture did not magically change the task; the data became learnable.</p>
+<p>The team also used practical engineering improvements:</p>
+<ol>
+<li>RAM caching so images did not need to be repeatedly loaded from disk.</li>
+<li>Mixed precision training to use GPU memory more efficiently.</li>
+<li>A ResNet-34 encoder to provide stronger image features.</li>
+</ol>
+<p>ResNet introduced residual connections, which make deep networks easier to train [R7]. This was a good fit because histology images contain many repeated textures and edges.</p>
+<hr>
+<h2 id="9-v11-the-first-strong-historical-baseline">9. v11: The First Strong Historical Baseline</h2>
+<p>v11 added VGG-19 perceptual loss and Sobel edge loss on top of the registered Pix2Pix setup. VGG networks are deep convolutional networks known for strong visual feature extraction [R8]. A perceptual loss compares feature maps inside a pretrained network instead of comparing only raw pixels.</p>
+<p>Why this made sense:</p>
+<ol>
+<li>H&amp;E staining is not only about color. It is also about cell texture.</li>
+<li>A raw pixel loss can punish tiny shifts too harshly.</li>
+<li>A perceptual loss can compare larger visual patterns.</li>
+<li>Sobel edge loss encourages structural boundaries.</li>
+</ol>
+<p>v11 reached:</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th style="text-align: right;">v11</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SSIM</td>
+<td style="text-align: right;">0.7120</td>
+</tr>
+<tr>
+<td>PSNR</td>
+<td style="text-align: right;">23.03 dB</td>
+</tr>
+<tr>
+<td>PCC</td>
+<td style="text-align: right;">0.8906</td>
+</tr>
+</tbody>
+</table>
+<p>At that time, v11 was the best project result. It proved that registration plus meaningful feature loss could create realistic virtual staining.</p>
+<p>However, v11 was not the final answer. The project later found that adversarial/perceptual complexity was not as reliable as a strong encoder plus clean L1 training.</p>
+<hr>
+<h2 id="10-why-some-more-advanced-ideas-failed">10. Why Some "More Advanced" Ideas Failed</h2>
+<p>Several later models tried to improve performance by adding more components: HED stain loss, attention gates, multi-scale discriminators, MS-SSIM loss, and larger loss combinations.</p>
+<p>Some of these ideas were scientifically reasonable. For example, HED decomposition tries to separate Hematoxylin and Eosin stain channels. Attention gates try to focus the model on important spatial regions. Multi-scale discriminators try to judge both local texture and global realism.</p>
+<p>But in practice, many of these additions made training unstable.</p>
+<p>The reason is that every loss function sends a gradient signal. If too many losses disagree, the model may not know what to optimize. One loss may push the output toward pixel accuracy, another toward texture realism, another toward edge sharpness, and another toward stain-channel separation. If the labels are not perfect, this can become worse.</p>
+<p>The project learned this:</p>
+<blockquote>
+<p>A complicated training objective is not automatically better. If data alignment is imperfect, simple stable losses can win.</p>
+</blockquote>
+<p>This is why v19b and v20 returned to L1-only training.</p>
+<hr>
+<h2 id="11-v13-v16-data-quantity-was-not-the-same-as-data-quality">11. v13-v16: Data Quantity Was Not the Same as Data Quality</h2>
+<p>One tempting idea was to train on more data. The project had thousands of registered pairs, so using all of them sounded useful. But v13 used many lower-quality registered pairs and dropped to about 0.6326 SSIM.</p>
+<p>This was a major lesson:</p>
+<blockquote>
+<p>More data helps only if the labels are reliable enough.</p>
+</blockquote>
+<p>In supervised learning, the model learns from the target image. If the target image is misaligned, the target becomes noisy. Adding more noisy pairs can make the model worse.</p>
+<p>This is why the project later focused on top-K selection:</p>
+<ol>
+<li>choose better registered pairs,</li>
+<li>avoid negative-gain pairs,</li>
+<li>prefer tissue-rich and information-rich patches,</li>
+<li>evaluate using a fixed held-out set.</li>
+</ol>
+<hr>
+<h2 id="12-v17-and-v19-why-warm-starts-and-losses-must-match-the-architecture">12. v17 and v19: Why Warm-Starts and Losses Must Match the Architecture</h2>
+<p>v17 tried a deeper 5-level U-Net with L1 + SSIM loss. One attempt used an incompatible warm-start from a different architecture. That caused a severe failure, with SSIM around 0.379.</p>
+<p>This is an important engineering lesson. Warm-starting means loading weights from an older model into a new model. It only helps if the old weights match the new architecture and scale. If they do not match, the model starts from a broken state.</p>
+<p>v19 tried a stronger architecture with multiple losses but diverged. v19b simplified the setup to a ResNet-34 U-Net with L1 only. That model became stable and reached 0.7489, but later this was found to be a leaky split result. The model was useful as a sign that L1-only training worked, but it could not be used as the clean final claim.</p>
+<hr>
+<h2 id="13-the-clean-split-problem">13. The Clean Split Problem</h2>
+<p>One of the most important scientific corrections in the project was identifying train/validation leakage.</p>
+<p>In image patch projects, leakage can happen when patches from the same slide or same tissue region appear in both training and validation. The model may then be tested on data that is too similar to what it has already seen.</p>
+<p>The project found that old v19b and old v20 had overlapping train/validation prefixes. Specifically, 91 out of 100 validation prefixes overlapped training in those older runs, according to the project research notes [P3].</p>
+<p>This did not mean the models were useless. It meant their scores were not clean final validation scores.</p>
+<p>v20_fixed corrected this by using a clean 900/100 split with <code>overlap=0</code>. This gave:</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Clean Split?</th>
+<th style="text-align: right;">SSIM</th>
+<th style="text-align: right;">PSNR</th>
+<th style="text-align: right;">PCC</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>v20_fixed</td>
+<td>Yes</td>
+<td style="text-align: right;">0.7606</td>
+<td style="text-align: right;">24.92</td>
+<td style="text-align: right;">0.8652</td>
+</tr>
+</tbody>
+</table>
+<p>This became the clean old-registered baseline.</p>
+<hr>
+<h2 id="14-v20-why-convnext-became-the-strongest-deployable-family">14. v20: Why ConvNeXt Became the Strongest Deployable Family</h2>
+<p>v20 used a ConvNeXt-Base encoder inside a U-Net-style image-to-image model. ConvNeXt modernized convolutional networks using design ideas learned from Vision Transformers while keeping CNN strengths [R5]. The exact deployed family used a <code>timm</code> ConvNeXt-Base CLIP/LAION pretrained checkpoint [R12].</p>
+<p>Why ConvNeXt helped:</p>
+<ol>
+<li>It is a stronger pretrained visual feature extractor than the earlier ResNet-34 setup.</li>
+<li>It captures both local texture and broader image context.</li>
+<li>It worked well with a simple L1 loss.</li>
+<li>It avoided GAN instability.</li>
+</ol>
+<p>The v20 lesson was:</p>
+<blockquote>
+<p>A strong pretrained encoder plus simple stable training beat a complicated GAN stack.</p>
+</blockquote>
+<p>This became one of the main design principles for the final project.</p>
+<hr>
+<h2 id="15-v21a-and-v21b-why-hibou-b-was-tested">15. v21A and v21B: Why Hibou-B Was Tested</h2>
+<p>Hibou-B is a histopathology-focused foundation model available through Hugging Face [R11]. It is based on the idea that a model pretrained on histology images should understand tissue patterns better than a general natural-image model. This idea follows the broader trend of strong self-supervised visual representations such as DINOv2 [R10].</p>
+<p>The team tested Hibou-B because it was a logical question:</p>
+<blockquote>
+<p>If the task is histology, can a histology-pretrained encoder beat a general visual encoder?</p>
+</blockquote>
+<p>v21A used a frozen Hibou-B feature extractor with a decoder. It reached:</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th style="text-align: right;">SSIM</th>
+<th style="text-align: right;">PSNR</th>
+<th style="text-align: right;">PCC</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>v21A</td>
+<td style="text-align: right;">0.7605</td>
+<td style="text-align: right;">24.77</td>
+<td style="text-align: right;">0.8634</td>
+</tr>
+</tbody>
+</table>
+<p>This almost exactly matched v20_fixed but did not beat it as a single model.</p>
+<p>Later v21B used Hibou-B with the content-quality CLAHE data. On the final CLAHE fixed evaluation it scored:</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th style="text-align: right;">SSIM</th>
+<th style="text-align: right;">PSNR</th>
+<th style="text-align: right;">PCC</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>v21B TTA4</td>
+<td style="text-align: right;">0.7790</td>
+<td style="text-align: right;">24.27</td>
+<td style="text-align: right;">0.8598</td>
+</tr>
+</tbody>
+</table>
+<p>v21B was not the best single model, but it added useful diversity to the final ensemble.</p>
+<p>The lesson:</p>
+<blockquote>
+<p>Domain-specific pretraining helped as an ensemble member, but it did not replace the ConvNeXt v22A model.</p>
+</blockquote>
+<hr>
+<h2 id="16-v22a-the-best-single-model-on-clahe-data">16. v22A: The Best Single Model on CLAHE Data</h2>
+<p>v22A was the most important final single-model experiment. It took the stable v20 architecture and warm-started it from <code>models/v20_fixed_model.pth</code>, then trained it on the content-quality CLAHE top-1000 dataset.</p>
+<p>This design was conservative and smart:</p>
+<ol>
+<li>Keep the architecture that already worked.</li>
+<li>Keep the simple L1-based training behavior.</li>
+<li>Improve the data instead of adding unstable losses.</li>
+<li>Warm-start from a known good checkpoint.</li>
+</ol>
+<p>On internal validation, v22A reached SSIM 0.7655. More importantly, on the final fixed CLAHE evaluation, v22A TTA4 reached:</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th style="text-align: right;">v22A TTA4</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SSIM</td>
+<td style="text-align: right;">0.7807</td>
+</tr>
+<tr>
+<td>PSNR</td>
+<td style="text-align: right;">25.16 dB</td>
+</tr>
+<tr>
+<td>PCC</td>
+<td style="text-align: right;">0.8782</td>
+</tr>
+</tbody>
+</table>
+<p>This showed that the CLAHE registration and content-quality training data produced real fixed-evaluation improvement.</p>
+<hr>
+<h2 id="17-why-test-time-augmentation-was-used">17. Why Test-Time Augmentation Was Used</h2>
+<p>Test-time augmentation is simple. The model predicts the output image multiple ways:</p>
+<ol>
+<li>original image,</li>
+<li>horizontally flipped image,</li>
+<li>vertically flipped image,</li>
+<li>both horizontally and vertically flipped image.</li>
+</ol>
+<p>The flipped predictions are flipped back and averaged.</p>
+<p>This helps because neural networks are not perfectly symmetric. If a small detail is predicted slightly differently after a flip, averaging can reduce noise.</p>
+<p>In this project, TTA4 was used for the final comparison because it improved stability without retraining the model. The cost is slower inference. For the final app, this is acceptable in high-quality mode, but a faster single-pass mode can still be used if speed matters.</p>
+<hr>
+<h2 id="18-why-the-final-ensemble-was-chosen">18. Why the Final Ensemble Was Chosen</h2>
+<p>The final ensemble combines three model families:</p>
+<ol>
+<li><strong>v20_fixed</strong>: the clean old-registered ConvNeXt baseline.</li>
+<li><strong>v22A</strong>: the best single CLAHE-trained ConvNeXt model.</li>
+<li><strong>v21B</strong>: the Hibou-B histology-feature model.</li>
+</ol>
+<p>The final tested ensembles were:</p>
+<table>
+<thead>
+<tr>
+<th>Ensemble</th>
+<th style="text-align: right;">SSIM</th>
+<th style="text-align: right;">PSNR</th>
+<th style="text-align: right;">PCC</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0.30 v20 + 0.50 v22A + 0.20 v21B</td>
+<td style="text-align: right;">0.7838</td>
+<td style="text-align: right;">25.08</td>
+<td style="text-align: right;">0.8789</td>
+</tr>
+<tr>
+<td>0.20 v20 + 0.60 v22A + 0.20 v21B</td>
+<td style="text-align: right;">0.7838</td>
+<td style="text-align: right;">25.16</td>
+<td style="text-align: right;">0.8794</td>
+</tr>
+</tbody>
+</table>
+<p>Both tied on SSIM. The second one had better PSNR and PCC, so it became the default.</p>
+<p>Why the weights make sense:</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th style="text-align: right;">Weight</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>v20_fixed</td>
+<td style="text-align: right;">0.20</td>
+<td>Keeps robust old-distribution behavior</td>
+</tr>
+<tr>
+<td>v22A</td>
+<td style="text-align: right;">0.60</td>
+<td>Best single CLAHE model, so it gets the largest weight</td>
+</tr>
+<tr>
+<td>v21B</td>
+<td style="text-align: right;">0.20</td>
+<td>Adds histology-domain diversity</td>
+</tr>
+</tbody>
+</table>
+<p>The ensemble improvement over v22A alone is small:</p>
+<pre><code class="language-text">v22A TTA4 SSIM: 0.7807
+final balanced ensemble SSIM: 0.7838
+gain: +0.0031 SSIM
+</code></pre>
+<p>This is not a huge jump, but at the final stage of image restoration tasks, small improvements can matter if they are consistent and evaluated fairly.</p>
+<hr>
+<h2 id="19-final-results-table">19. Final Results Table</h2>
+<p>The final evaluation compared old registered data and CLAHE same-prefix data.</p>
+<table>
+<thead>
+<tr>
+<th>Fixed Evaluation Set</th>
+<th>Best Method</th>
+<th style="text-align: right;">SSIM</th>
+<th style="text-align: right;">PSNR</th>
+<th style="text-align: right;">PCC</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Old registered</td>
+<td>v20 TTA4</td>
+<td style="text-align: right;">0.7634</td>
+<td style="text-align: right;">25.03</td>
+<td style="text-align: right;">0.8684</td>
+</tr>
+<tr>
+<td>CLAHE same-prefixes</td>
+<td>0.30 v20 + 0.50 v22A + 0.20 v21B TTA4</td>
+<td style="text-align: right;">0.7838</td>
+<td style="text-align: right;">25.08</td>
+<td style="text-align: right;">0.8789</td>
+</tr>
+<tr>
+<td>CLAHE same-prefixes</td>
+<td>0.20 v20 + 0.60 v22A + 0.20 v21B TTA4</td>
+<td style="text-align: right;">0.7838</td>
+<td style="text-align: right;">25.16</td>
+<td style="text-align: right;">0.8794</td>
+</tr>
+</tbody>
+</table>
+<p>The project therefore has two honest deployment messages:</p>
+<ol>
+<li>For the old registered input distribution, use <strong>v20 TTA4</strong>.</li>
+<li>For the final CLAHE-trained pipeline, use the <strong>balanced v20/v22A/v21B ensemble</strong>.</li>
+</ol>
+<p>This distinction matters. A model trained or tuned for one data distribution may not be best for another.</p>
+<hr>
+<h2 id="20-the-final-app">20. The Final App</h2>
+<p>The project now includes a final app:</p>
+<pre><code class="language-bash">python best_stain_app.py
+</code></pre>
+<p>It also supports command-line inference:</p>
+<pre><code class="language-bash">python best_stain_app.py --input path/to/unstained.tif --output virtual_he.png
+</code></pre>
+<p>The app modes are:</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>balanced</td>
+<td>Default final ensemble</td>
+</tr>
+<tr>
+<td>best_ssim</td>
+<td>Tied SSIM ensemble with slightly lower PSNR/PCC</td>
+</tr>
+<tr>
+<td>v22_tta</td>
+<td>Best single CLAHE model</td>
+</tr>
+<tr>
+<td>v20_tta</td>
+<td>Best old-registered fallback</td>
+</tr>
+</tbody>
+</table>
+<p>The final app needs these model files:</p>
+<pre><code class="language-text">models/v20_fixed_model.pth
+models/v22a_content_quality_top1000_ft_model.pth
+models/v21b_hibou_content_quality_ft_model.pth
+</code></pre>
+<p>For the v21B model, the app also needs the Hibou-B Hugging Face model code/config. A clean laptop can use:</p>
+<pre><code class="language-text">models/hibou-b/
+</code></pre>
+<p>or set:</p>
+<pre><code class="language-text">HIBOU_MODEL_PATH
+</code></pre>
+<p>If Hibou-B is hard to distribute, the app can still run the v22A-only mode.</p>
+<hr>
+<h2 id="21-main-challenges-and-how-they-were-solved">21. Main Challenges and How They Were Solved</h2>
+<h3 id="challenge-1-image-pairs-were-not-aligned">Challenge 1: Image pairs were not aligned</h3>
+<p><strong>Problem:</strong> The same cell appeared in different positions in input and target.</p>
+<p><strong>Solution:</strong> Use TV-L1 optical flow registration, then improve it with CLAHE.</p>
+<p><strong>Why this decision was right:</strong> Registration gave the largest early improvement in the project, moving from about 0.26 SSIM to above 0.65 in the registered Pix2Pix line.</p>
+<h3 id="challenge-2-more-data-sometimes-made-results-worse">Challenge 2: More data sometimes made results worse</h3>
+<p><strong>Problem:</strong> All 8,885 pairs included low-quality registrations.</p>
+<p><strong>Solution:</strong> Use top-K selection and content-quality ranking instead of blindly using everything.</p>
+<p><strong>Why this decision was right:</strong> v13 showed that using more low-quality data could reduce performance. v22A showed that better selected CLAHE data improved fixed evaluation.</p>
+<h3 id="challenge-3-gan-training-became-unstable">Challenge 3: GAN training became unstable</h3>
+<p><strong>Problem:</strong> Adding adversarial, perceptual, HED, and SSIM losses created conflicting gradients.</p>
+<p><strong>Solution:</strong> Move toward simple L1-only training with stronger pretrained encoders.</p>
+<p><strong>Why this decision was right:</strong> v19b/v20/v20_fixed became stable, and v22A produced the strongest single-model result.</p>
+<h3 id="challenge-4-validation-leakage-could-mislead-the-team">Challenge 4: Validation leakage could mislead the team</h3>
+<p><strong>Problem:</strong> Earlier v19b and v20 runs had overlapping train/validation prefixes.</p>
+<p><strong>Solution:</strong> Use a clean split for v20_fixed and a fixed final evaluation for v22A/v21B/final ensemble.</p>
+<p><strong>Why this decision was right:</strong> It made the final claim more trustworthy.</p>
+<h3 id="challenge-5-domain-foundation-models-were-harder-to-deploy">Challenge 5: Domain foundation models were harder to deploy</h3>
+<p><strong>Problem:</strong> Hibou-B was useful but required external Hugging Face model files and custom loading.</p>
+<p><strong>Solution:</strong> Keep Hibou-B as an ensemble member but preserve v22A and v20 fallback modes.</p>
+<p><strong>Why this decision was right:</strong> The best internal model quality is available, but the app still has simpler distribution paths.</p>
+<hr>
+<h2 id="22-why-the-final-decisions-are-defensible">22. Why the Final Decisions Are Defensible</h2>
+<p>The final system is defensible because each major choice has evidence.</p>
+<table>
+<thead>
+<tr>
+<th>Decision</th>
+<th>Evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Use non-rigid registration</td>
+<td>Unregistered Pix2Pix was about 0.26 SSIM; registered models exceeded 0.70</td>
+</tr>
+<tr>
+<td>Use CLAHE TV-L1</td>
+<td>All-pair registration mean SSIM improved from 0.4134 to 0.5045</td>
+</tr>
+<tr>
+<td>Use clean validation</td>
+<td>Earlier overlapping splits were corrected by v20_fixed and fixed eval</td>
+</tr>
+<tr>
+<td>Use ConvNeXt U-Net</td>
+<td>v20_fixed was the strongest clean old-registered baseline</td>
+</tr>
+<tr>
+<td>Use v22A as main final model</td>
+<td>v22A TTA4 was the best single CLAHE fixed-eval model</td>
+</tr>
+<tr>
+<td>Include v21B in ensemble</td>
+<td>It added diversity and improved final ensemble score</td>
+</tr>
+<tr>
+<td>Make balanced ensemble default</td>
+<td>It tied SSIM and improved PSNR/PCC</td>
+</tr>
+<tr>
+<td>Keep v20 fallback</td>
+<td>Old registered validation still preferred v20 TTA4</td>
+</tr>
+</tbody>
+</table>
+<p>This is exactly how engineering research should work: test, measure, find failure modes, simplify when needed, and keep the evaluation fair.</p>
+<hr>
+<h2 id="23-limitations">23. Limitations</h2>
+<p>The project is strong, but it is not finished clinical validation.</p>
+<h3 id="limitation-1-dataset-and-slide-diversity">Limitation 1: Dataset and slide diversity</h3>
+<p>The final content-quality top-1000 dataset improved performance, but it may still be narrow. More slides and more tissue types are needed to test generalization.</p>
+<h3 id="limitation-2-metrics-are-not-clinical-proof">Limitation 2: Metrics are not clinical proof</h3>
+<p>SSIM, PSNR, and PCC are useful, but they do not prove that a pathologist would make the same diagnosis from the virtual stain. A future study should include expert review and cell/nuclei-level quantitative checks.</p>
+<h3 id="limitation-3-final-ensemble-is-slower">Limitation 3: Final ensemble is slower</h3>
+<p>The default mode runs three models and four TTA passes. That can mean up to 12 model forward passes per image. It is high quality but slower than a single model.</p>
+<h3 id="limitation-4-hibou-b-packaging">Limitation 4: Hibou-B packaging</h3>
+<p>The v21B model requires Hibou-B runtime files. This makes full portable distribution harder. The app handles this by allowing v22A-only and v20-only fallback modes.</p>
+<h3 id="limitation-5-the-app-is-not-a-medical-device">Limitation 5: The app is not a medical device</h3>
+<p>The app is a research prototype. It should not be used for clinical decisions without proper validation, regulatory review, and pathologist evaluation.</p>
+<hr>
+<h2 id="24-future-work">24. Future Work</h2>
+<p>The next best steps are not random architecture changes. The project should continue the pattern that worked.</p>
+<h3 id="step-1-scale-clahecontent-quality-data-carefully">Step 1: Scale CLAHE/content-quality data carefully</h3>
+<p>Train on top-1500 and top-2000 selected pairs. Make sure slide diversity does not collapse.</p>
+<h3 id="step-2-use-the-same-fixed-evaluation-gate">Step 2: Use the same fixed evaluation gate</h3>
+<p>Every new model should be tested on the same fixed validation prefixes. Otherwise, scores will not be comparable.</p>
+<h3 id="step-3-add-biological-validation">Step 3: Add biological validation</h3>
+<p>Use nuclei segmentation, tissue-region analysis, and pathologist review. The final model should be judged not only by SSIM but by whether it preserves diagnostic structures.</p>
+<h3 id="step-4-try-domain-encoders-again-after-data-policy-is-stable">Step 4: Try domain encoders again after data policy is stable</h3>
+<p>Hibou-B helped in the ensemble but did not win alone. A future domain encoder should be tested only after the data pipeline is stable.</p>
+<h3 id="step-5-improve-public-deployment">Step 5: Improve public deployment</h3>
+<p>The best public package may be v22A-only because it avoids Hibou-B packaging complexity. The internal research package can keep the full ensemble.</p>
+<hr>
+<h2 id="25-final-takeaway">25. Final Takeaway</h2>
+<p>The project moved from blurry unregistered Pix2Pix outputs to a strong final ensemble by solving the right problems in the right order.</p>
+<p>The biggest improvements were not from one magical model. They came from:</p>
+<ol>
+<li>aligning the images,</li>
+<li>selecting better training pairs,</li>
+<li>using clean validation,</li>
+<li>choosing stable training over complicated losses,</li>
+<li>using a strong ConvNeXt backbone,</li>
+<li>adding Hibou-B only where it helped,</li>
+<li>combining models carefully at inference time.</li>
+</ol>
+<p>The final result is:</p>
+<pre><code class="language-text">CLAHE TV-L1 + balanced v20/v22A/v21B TTA4 ensemble
+SSIM 0.7838, PSNR 25.16 dB, PCC 0.8794
+</code></pre>
+<p>That is the current best project baseline.</p>
+<hr>
+<h2 id="appendix-a-final-app-and-repository-files">Appendix A: Final App and Repository Files</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>best_stain_app.py</code></td>
+<td>Final app</td>
+</tr>
+<tr>
+<td><code>best_model_manifest.json</code></td>
+<td>Final model manifest</td>
+</tr>
+<tr>
+<td><code>APP_DISTRIBUTION.md</code></td>
+<td>How to run/build/share the app</td>
+</tr>
+<tr>
+<td><code>SCRIPT_INDEX.md</code></td>
+<td>Root script handoff map</td>
+</tr>
+<tr>
+<td><code>logs/final_v21b_v22a_eval_summary.txt</code></td>
+<td>Final aggregate metrics</td>
+</tr>
+<tr>
+<td><code>logs/final_v21b_v22a_eval_per_pair.csv</code></td>
+<td>Per-pair final metrics</td>
+</tr>
+<tr>
+<td><code>registration_pipeline_clahe.py</code></td>
+<td>CLAHE TV-L1 registration</td>
+</tr>
+<tr>
+<td><code>train_v20_csv_variant.py</code></td>
+<td>v22A training path</td>
+</tr>
+<tr>
+<td><code>train_v21b_hibou_content.py</code></td>
+<td>v21B training path</td>
+</tr>
+<tr>
+<td><code>eval_v21b_v22a_final.py</code></td>
+<td>Final evaluation</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="appendix-b-visual-example-sheet">Appendix B: Visual Example Sheet</h2>
+<p>The project includes generated visual grids under:</p>
+<pre><code class="language-text">showcase_images/v21_ensemble_comparison/
+</code></pre>
+<p>The image below is included as a qualitative reference. Metric tables remain the main evidence.</p>
+<p><img src="showcase_images/v21_ensemble_comparison/best_grid.png" class="wide-img" alt="Best qualitative virtual staining grid"></p>
+<hr>
+<h2 id="appendix-c-claim-evidence-map">Appendix C: Claim-Evidence Map</h2>
+<table>
+<thead>
+<tr>
+<th>Claim</th>
+<th>Evidence</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Registration was necessary</td>
+<td>v1-v7 around 0.26 SSIM; registered v10 reached 0.706</td>
+<td>Supported</td>
+</tr>
+<tr>
+<td>CLAHE TV-L1 improved registration</td>
+<td>all-pair mean SSIM 0.4134 -&gt; 0.5045</td>
+<td>Supported</td>
+</tr>
+<tr>
+<td>v20_fixed is clean old-registered baseline</td>
+<td>clean split, SSIM 0.7606</td>
+<td>Supported</td>
+</tr>
+<tr>
+<td>v22A is best single CLAHE model</td>
+<td>fixed CLAHE TTA4 SSIM 0.7807</td>
+<td>Supported</td>
+</tr>
+<tr>
+<td>Final balanced ensemble is best handoff mode</td>
+<td>SSIM 0.7838, PSNR 25.16, PCC 0.8794</td>
+<td>Supported</td>
+</tr>
+<tr>
+<td>Hibou-B helped but did not win alone</td>
+<td>v21B TTA4 0.7790, below v22A 0.7807, but useful in ensemble</td>
+<td>Supported</td>
+</tr>
+<tr>
+<td>Clinical use still requires validation</td>
+<td>Metrics are image similarity metrics, not pathologist diagnosis</td>
+<td>Supported</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="references">References</h2>
+<h3 id="project-artifacts">Project Artifacts</h3>
+<p>[P1] <code>logs/final_v21b_v22a_eval_summary.txt</code>, final v20/v22A/v21B fixed evaluation, generated in this repository.
+[P2] <code>best_model_manifest.json</code>, final weighted ensemble manifest, generated in this repository.
+[P3] <code>research/08_results_comparison.md</code>, project results matrix and leakage notes.
+[P4] <code>research/02_image_registration.md</code>, registration methods and CLAHE TV-L1 results.
+[P5] <code>research/04_training_history.md</code>, chronological model history from v1 to final ensemble.</p>
+<h3 id="external-technical-references">External Technical References</h3>
+<p>[R1] Zach, C., Pock, T., and Bischof, H. "A Duality Based Approach for Realtime TV-L1 Optical Flow." DAGM 2007. https://link.springer.com/chapter/10.1007/978-3-540-74936-3_22</p>
+<p>[R2] Wang, Z., Bovik, A. C., Sheikh, H. R., and Simoncelli, E. P. "Image Quality Assessment: From Error Visibility to Structural Similarity." IEEE Transactions on Image Processing, 2004. https://pubmed.ncbi.nlm.nih.gov/15376593/</p>
+<p>[R3] Ronneberger, O., Fischer, P., and Brox, T. "U-Net: Convolutional Networks for Biomedical Image Segmentation." MICCAI 2015. https://arxiv.org/abs/1505.04597</p>
+<p>[R4] Isola, P., Zhu, J.-Y., Zhou, T., and Efros, A. A. "Image-to-Image Translation with Conditional Adversarial Networks." CVPR 2017. https://arxiv.org/abs/1611.07004</p>
+<p>[R5] Liu, Z. et al. "A ConvNet for the 2020s." CVPR 2022. https://arxiv.org/abs/2201.03545</p>
+<p>[R6] Gulrajani, I. et al. "Improved Training of Wasserstein GANs." NeurIPS 2017. https://arxiv.org/abs/1704.00028</p>
+<p>[R7] He, K., Zhang, X., Ren, S., and Sun, J. "Deep Residual Learning for Image Recognition." CVPR 2016. https://arxiv.org/abs/1512.03385</p>
+<p>[R8] Simonyan, K. and Zisserman, A. "Very Deep Convolutional Networks for Large-Scale Image Recognition." ICLR 2015. https://arxiv.org/abs/1409.1556</p>
+<p>[R9] Zuiderveld, K. "Contrast Limited Adaptive Histogram Equalization." Graphics Gems IV, 1994. https://dl.acm.org/doi/10.5555/180895.180940</p>
+<p>[R10] Oquab, M. et al. "DINOv2: Learning Robust Visual Features without Supervision." 2023. https://arxiv.org/abs/2304.07193</p>
+<p>[R11] Hugging Face model card for <code>histai/hibou-b</code>. https://huggingface.co/histai/hibou-b</p>
+<p>[R12] Hugging Face model card for <code>timm/convnext_base.clip_laion2b_augreg_ft_in1k</code>. https://huggingface.co/timm/convnext_base.clip_laion2b_augreg_ft_in1k</p>
+</body>
+</html>
