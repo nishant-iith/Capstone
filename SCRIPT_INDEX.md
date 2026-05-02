@@ -42,6 +42,16 @@ This is the practical handoff index for the root-level scripts. The project keep
 | `train_v21a_hibou_b.py` | v21A Hibou-B baseline. |
 | `train_v21b_hibou_content.py` | v21B Hibou-B content-quality fine-tune. |
 
+## Reports and Showcase
+
+| File | Purpose |
+|---|---|
+| `generate_best100_clahe_showcase.py` | Generates 100 best newer-registration visual panels with unstained input, virtual H&E, and real H&E target. |
+| `reports/build_final_project_pdf.py` | Compatibility entry point for rebuilding the detailed PDF report and GitHub Pages assets. |
+| `reports/build_final_project_site.py` | Main report/site builder used by the compatibility entry point. |
+| `docs/index.html` | GitHub Pages research page source. |
+| `showcase_images/best100_clahe_balanced/metadata.csv` | Rank, file path, content-quality score, CLAHE SSIM, and tissue fraction for the best-100 panels. |
+
 ## Historical Experiments
 
 Files such as `app.py`, `train_weakly_supervised.py`, `train_v7.py`, `train_v13.py`, `train_v14.py`, `train_v15.py`, `train_v16.py`, `train_v17.py`, `train_v19.py`, and `train_v19b.py` are retained as research history. They are not the current best deployment path.

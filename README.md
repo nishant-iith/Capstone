@@ -42,7 +42,13 @@ APP_DISTRIBUTION.md
 best_model_manifest.json
 logs/final_v21b_v22a_eval_summary.txt
 logs/final_v21b_v22a_eval_per_pair.csv
+reports/final_project_progress_report.pdf
+docs/index.html
+showcase_images/best100_clahe_balanced/
+generate_best100_clahe_showcase.py
 ```
+
+The GitHub Pages source lives in `docs/`. It includes a minimal research-style page, the detailed PDF report, the full HTML report, and 100 generated comparison panels from the newer CLAHE registration set.
 
 The older v11 Pix2Pix/GAN documentation below is retained as project history. It is no longer the current best.
 

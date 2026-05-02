@@ -89,6 +89,7 @@ hr {
   height: auto;
   border: 1px solid #c9d6e2;
   margin-top: 8pt;
+  page-break-inside: avoid;
 }
 a {
   color: #1b66b1;
@@ -1086,15 +1087,45 @@ SSIM 0.7838, PSNR 25.16 dB, PCC 0.8794
 <td><code>eval_v21b_v22a_final.py</code></td>
 <td>Final evaluation</td>
 </tr>
+<tr>
+<td><code>generate_best100_clahe_showcase.py</code></td>
+<td>Generates the best-100 qualitative comparison panels</td>
+</tr>
+<tr>
+<td><code>showcase_images/best100_clahe_balanced/</code></td>
+<td>Best-100 registered input / virtual H&amp;E / real H&amp;E visual panels</td>
+</tr>
+<tr>
+<td><code>docs/index.html</code>, <code>docs/styles.css</code>, <code>docs/app.js</code></td>
+<td>GitHub Pages research site</td>
+</tr>
+<tr>
+<td><code>reports/build_final_project_pdf.py</code></td>
+<td>Compatibility entry point for rebuilding the PDF report and GitHub Pages assets</td>
+</tr>
+<tr>
+<td><code>reports/build_final_project_site.py</code></td>
+<td>Main PDF and GitHub Pages report/site builder</td>
+</tr>
 </tbody>
 </table>
 <hr>
 <h2 id="appendix-b-visual-example-sheet">Appendix B: Visual Example Sheet</h2>
-<p>The project includes generated visual grids under:</p>
+<p>The project now includes a larger qualitative showcase under:</p>
+<pre><code class="language-text">showcase_images/best100_clahe_balanced/
+</code></pre>
+<p>These panels were generated from the best 100 newer CLAHE/content-quality registered pairs. Each panel shows the unstained input, the final balanced virtual H&amp;E prediction, and the real stained target. The image number is printed in the title so each visual example can be traced back to the metadata file.</p>
+<p>The six panels below are the top ranked examples from the best-100 set. They are qualitative evidence only; the metric tables remain the main quantitative evidence.</p>
+<p><img src="../showcase_images/best100_clahe_balanced/featured/001_AS-5198-23-Z36_patch_38912_49152.jpg" class="wide-img" alt="Best-100 qualitative panel rank 1"></p>
+<p><img src="../showcase_images/best100_clahe_balanced/featured/002_AS-5198-23-Z36_patch_38912_48128.jpg" class="wide-img" alt="Best-100 qualitative panel rank 2"></p>
+<p><img src="../showcase_images/best100_clahe_balanced/featured/003_AS-5198-23-Z39_patch_28672_49152.jpg" class="wide-img" alt="Best-100 qualitative panel rank 3"></p>
+<p><img src="../showcase_images/best100_clahe_balanced/featured/004_AS-5198-23-Z42_patch_41984_20480.jpg" class="wide-img" alt="Best-100 qualitative panel rank 4"></p>
+<p><img src="../showcase_images/best100_clahe_balanced/featured/005_AS-5198-23-Z43_patch_33792_67584.jpg" class="wide-img" alt="Best-100 qualitative panel rank 5"></p>
+<p><img src="../showcase_images/best100_clahe_balanced/featured/006_AS-5198-23-Z42_patch_40960_56320.jpg" class="wide-img" alt="Best-100 qualitative panel rank 6"></p>
+<p>The earlier v21 ensemble grid is still retained for historical comparison:</p>
 <pre><code class="language-text">showcase_images/v21_ensemble_comparison/
 </code></pre>
-<p>The image below is included as a qualitative reference. Metric tables remain the main evidence.</p>
-<p><img src="showcase_images/v21_ensemble_comparison/best_grid.png" class="wide-img" alt="Best qualitative virtual staining grid"></p>
+<p><img src="../showcase_images/v21_ensemble_comparison/best_grid.png" class="wide-img" alt="Historical v21 qualitative virtual staining grid"></p>
 <hr>
 <h2 id="appendix-c-claim-evidence-map">Appendix C: Claim-Evidence Map</h2>
 <table>

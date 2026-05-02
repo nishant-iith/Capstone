@@ -161,23 +161,9 @@ def render_html(body: str, image_path: str, include_tools: bool) -> str:
 
 
 def main() -> None:
-    text = SOURCE.read_text(encoding="utf-8")
-    body = markdown.markdown(
-        text,
-        extensions=["tables", "fenced_code", "toc", "sane_lists"],
-        output_format="html5",
-    )
-    html = render_html(body, "showcase_images/v21_ensemble_comparison/best_grid.png", include_tools=False)
-    HTML_OUT.write_text(html, encoding="utf-8")
-    HTML(string=html, base_url=str(ROOT)).write_pdf(PDF_OUT)
-    PAGES_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
-    page_html = render_html(body, "assets/best_grid.png", include_tools=True)
-    PAGES_HTML_OUT.write_text(page_html, encoding="utf-8")
-    shutil.copy2(PDF_OUT, PAGES_PDF_OUT)
-    shutil.copy2(SOURCE_IMAGE, PAGES_IMAGE_OUT)
-    (PAGES_DIR / ".nojekyll").write_text("", encoding="utf-8")
-    print(PDF_OUT)
-    print(PAGES_HTML_OUT)
+    from build_final_project_site import main as build_site_main
+
+    build_site_main()
 
 
 if __name__ == "__main__":

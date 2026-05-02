@@ -731,20 +731,45 @@ That is the current best project baseline.
 | `train_v20_csv_variant.py` | v22A training path |
 | `train_v21b_hibou_content.py` | v21B training path |
 | `eval_v21b_v22a_final.py` | Final evaluation |
+| `generate_best100_clahe_showcase.py` | Generates the best-100 qualitative comparison panels |
+| `showcase_images/best100_clahe_balanced/` | Best-100 registered input / virtual H&E / real H&E visual panels |
+| `docs/index.html`, `docs/styles.css`, `docs/app.js` | GitHub Pages research site |
+| `reports/build_final_project_pdf.py` | Compatibility entry point for rebuilding the PDF report and GitHub Pages assets |
+| `reports/build_final_project_site.py` | Main PDF and GitHub Pages report/site builder |
 
 ---
 
 ## Appendix B: Visual Example Sheet
 
-The project includes generated visual grids under:
+The project now includes a larger qualitative showcase under:
+
+```text
+showcase_images/best100_clahe_balanced/
+```
+
+These panels were generated from the best 100 newer CLAHE/content-quality registered pairs. Each panel shows the unstained input, the final balanced virtual H&E prediction, and the real stained target. The image number is printed in the title so each visual example can be traced back to the metadata file.
+
+The six panels below are the top ranked examples from the best-100 set. They are qualitative evidence only; the metric tables remain the main quantitative evidence.
+
+<img src="showcase_images/best100_clahe_balanced/featured/001_AS-5198-23-Z36_patch_38912_49152.jpg" class="wide-img" alt="Best-100 qualitative panel rank 1">
+
+<img src="showcase_images/best100_clahe_balanced/featured/002_AS-5198-23-Z36_patch_38912_48128.jpg" class="wide-img" alt="Best-100 qualitative panel rank 2">
+
+<img src="showcase_images/best100_clahe_balanced/featured/003_AS-5198-23-Z39_patch_28672_49152.jpg" class="wide-img" alt="Best-100 qualitative panel rank 3">
+
+<img src="showcase_images/best100_clahe_balanced/featured/004_AS-5198-23-Z42_patch_41984_20480.jpg" class="wide-img" alt="Best-100 qualitative panel rank 4">
+
+<img src="showcase_images/best100_clahe_balanced/featured/005_AS-5198-23-Z43_patch_33792_67584.jpg" class="wide-img" alt="Best-100 qualitative panel rank 5">
+
+<img src="showcase_images/best100_clahe_balanced/featured/006_AS-5198-23-Z42_patch_40960_56320.jpg" class="wide-img" alt="Best-100 qualitative panel rank 6">
+
+The earlier v21 ensemble grid is still retained for historical comparison:
 
 ```text
 showcase_images/v21_ensemble_comparison/
 ```
 
-The image below is included as a qualitative reference. Metric tables remain the main evidence.
-
-<img src="showcase_images/v21_ensemble_comparison/best_grid.png" class="wide-img" alt="Best qualitative virtual staining grid">
+<img src="showcase_images/v21_ensemble_comparison/best_grid.png" class="wide-img" alt="Historical v21 qualitative virtual staining grid">
 
 ---
 
