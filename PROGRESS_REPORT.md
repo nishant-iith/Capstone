@@ -1,5 +1,26 @@
 # Comprehensive Progress Report: Histology Virtual Staining (SOTA)
 
+## Final Update - 2026-05-02
+
+The current best result is no longer the historical v11 model. The final fixed-evaluation pipeline is:
+
+```text
+CLAHE TV-L1 registration -> TTA4 -> weighted v20/v22A/v21B ensemble
+```
+
+Best CLAHE same-prefix validation:
+
+| Method | SSIM | PSNR | PCC |
+|---|---:|---:|---:|
+| `0.30*v20 + 0.50*v22A + 0.20*v21B` | **0.7838** | 25.08 | 0.8789 |
+| `0.20*v20 + 0.60*v22A + 0.20*v21B` | **0.7838** | **25.16** | **0.8794** |
+
+Old registered validation remains best with v20 TTA4: SSIM 0.7634, PSNR 25.03, PCC 0.8684.
+
+Current app: `best_stain_app.py`. The older v11/v20 notes below are retained as historical progress, not the current best.
+
+---
+
 This document provides a exhaustive technical record of the development of a High-Fidelity Virtual H&E Staining system. It covers the evolution from an unstable baseline to a biologically-aware generative pipeline.
 
 ---
@@ -60,7 +81,7 @@ $$Loss = \lambda_{adv}GAN + \lambda_{L1}Pixel + \lambda_{struct}Sobel + \lambda_
 *   **VGG-19 Perceptual Loss:** We used a pre-trained VGG-19 network to extract feature maps at 5 different depths. The model now learns to match the **"Shape"** and **"Texture"** of cells.
 *   **PCC Metric:** Introduced the Pearson Correlation Coefficient to measure the linear relationship between virtual and real staining.
 
-### SOTA Achievement (Current Project Best)
+### Historical v11 Achievement (Superseded)
 *   **Model:** `ws-epoch=27-val_ssim=0.712.ckpt`
 *   **SSIM:** **0.712**
 *   **PSNR:** **23.03 dB**
@@ -79,8 +100,8 @@ We tried to standardize the "Reference Color" of all stained images using Macenk
 
 ---
 
-## 6. The "Golden Foundation" Model
-For all future work and the 10x dataset expansion, we have selected the following model as our primary foundation:
+## 6. Historical v11 Foundation Model
+At the time of this report, the v11 checkpoint was selected as the primary foundation. It is now superseded by the v20/v22A/v21B line documented at the top of this file.
 
 *   **Model Identifier:** `Weakly-Supervised-v11-E27`
 *   **Checkpoint Path:** `checkpoints_weakly_supervised/ws-epoch=27-val_ssim=0.712.ckpt`
@@ -113,5 +134,5 @@ The final research paper should report:
 
 ---
 
-**Document Version:** 2.1 (Strategic Scaling Update)
-**Project Status:** Foundation Locked. Ready for Large-Scale Deployment.
+**Document Version:** 2.1 historical, with 2026-05-02 final update above.
+**Project Status:** Superseded by the final CLAHE ensemble and app artifacts.

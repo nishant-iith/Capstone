@@ -1,6 +1,6 @@
 # 05: Loss Functions — All Components Explored
 
-> **Bottom Line:** L1 + Perceptual (VGG-19) + Sobel was the winning combination (v11). Adding HED stain decomposition destabilized training. Direct SSIM optimization was tried in v17 but failed (SSIM 0.379) — not the loss's fault, but a wrong-scale warm-start from a differently-shaped parent model. MS-SSIM remains promising for v18. WGAN-GP adversarial loss is powerful but requires careful balancing — without it, models are more stable but slightly blurrier.
+> **Bottom Line:** L1-only remains the most reliable objective. The final best result comes from L1-trained models plus better registration/data and TTA ensembling, not from multi-term losses. Final CLAHE ensemble: SSIM 0.7838, PSNR 25.16, PCC 0.8794.
 
 ---
 
@@ -16,9 +16,9 @@ $$
 - Robust to outliers (compared to L2/MSE)
 - **Failure mode:** When uncertain, model predicts the **mean** → blurry outputs
 
-**Used in:** Every model from v1 onwards. Always with weight λ=100 in hybrid losses.
+**Used in:** Every model from v1 onwards. Weight λ=100 in hybrid losses; direct normalized L1 in v14/v19b/v20/v20_fixed.
 
-**Verdict:** ✅ **Foundational.** Cannot be removed without losing color/intensity grounding.
+**Verdict:** ✅ **Foundational and currently strongest.** Plain L1 is less glamorous than perceptual or adversarial losses, but it is the only objective that has repeatedly scaled to the best recent full-size runs without divergence.
 
 ---
 
@@ -89,7 +89,7 @@ class PerceptualLoss(nn.Module):
 **Hyperparameters:**
 - λ_percept = 10 (in v11 hybrid loss)
 
-**Used in:** v11 (project best), v15, v16
+**Used in:** v11 (historical project best), v15, v16
 
 **Verdict:** ✅ **Critical for breaking 0.71 SSIM ceiling.** Adds ~0.005-0.010 SSIM improvement.
 
@@ -207,11 +207,11 @@ class L1SSIMLoss(nn.Module):
 
 **Used in:** v17 (failed at SSIM 0.379)
 
-**Verdict:** ⚠️ **Inconclusive — loss config is sound, but v17's wrong-scale warm-start prevented evaluating the loss in isolation.** Re-test in v18 with proper init (ResNet-34 ImageNet) before drawing conclusions. The L1+SSIM combination itself is well-motivated and theoretically expected to give +0.01-0.02 SSIM over L1-only.
+**Verdict:** ⚠️ **Inconclusive — loss config is sound, but v17's wrong-scale warm-start prevented evaluating the loss in isolation.** Re-test only as a one-change ablation against v20_fixed before drawing conclusions. The L1+SSIM combination itself is well-motivated, but stability must be proven in this codebase.
 
 ---
 
-## 7. MS-SSIM Loss (Recommended for v18)
+## 7. MS-SSIM Loss (Promising but Not Yet Proven Here)
 
 **Formula:**
 Multi-Scale SSIM computes SSIM at 5 progressively downsampled scales:
@@ -230,9 +230,9 @@ from pytorch_msssim import MS_SSIM
 ms_ssim_loss = 1.0 - MS_SSIM(data_range=1.0, channel=3)(pred, target)
 ```
 
-**Used in:** Not yet (recommended for v18)
+**Used in:** v19 as part of `L1 + MS-SSIM + VGG`, which diverged. That failure does not prove MS-SSIM alone is bad, but it does prove the combined objective is not automatically stable.
 
-**Expected Gain:** +0.01-0.02 SSIM over single-scale SSIM
+**Expected Gain:** Re-test only as a controlled ablation against v20_fixed. Do not combine with VGG and other losses until a small run proves stable.
 
 ---
 
@@ -249,9 +249,14 @@ ms_ssim_loss = 1.0 - MS_SSIM(data_range=1.0, channel=3)(pred, target)
 | v15     | ✓ (100) | ✓ (10) | ✓ (10) | ✓ (20) | ✓ (5) | – | – | 0.7199 → diverged |
 | v16     | ✓ (100) | ✓ (10) | ✓ (10) | ✓ (20) | – | – | – | 0.6976 → diverged |
 | v17     | ✓ (0.5) | – | – | – | – | ✓ (0.5) | – | 0.379 ❌ (warm-start scale mismatch) |
-| v18*    | ✓ (0.4) | – | ✓ (0.2) | – | – | – | ✓ (0.4) | predicted 0.76+ |
+| v19     | ✓ | – | ✓ | – | – | – | ✓ | diverged |
+| v19b    | ✓ | – | – | – | – | – | – | 0.7489 (leaky split) |
+| v20     | ✓ | – | – | – | – | – | – | 0.7549 (leaky split) |
+| **v20_fixed** | **✓** | **–** | **–** | **–** | **–** | **–** | **–** | **0.7606 clean** |
+| v21A    | ✓ | – | – | – | – | – | – | 0.7605 clean |
+| v22A*   | ✓ | – | optional ablation only | – | – | – | optional ablation only | complete; best single CLAHE fixed-eval model with TTA4 |
 
-*v18 is hypothetical (recommended)
+*v22A should keep the loss fixed while testing data/registration changes. Do not add SSIM/VGG/GAN terms until the content-quality data effect is isolated.
 
 ---
 
@@ -266,8 +271,8 @@ GAN loss can give a +0.005-0.010 SSIM boost when stable, but causes catastrophic
 ### Lesson 3: **Don't Stack Too Many Conflicting Losses**
 v12, v13, v15 with 5+ loss terms (L1 + WGAN-GP + VGG + Sobel + HED) all suffered from competing gradients. v11's 4-term formulation was the maximum tractable complexity.
 
-### Lesson 4: **Optimize What You Measure (Untested)**
-v14 (L1 only) → 0.7080. v17 (L1+SSIM) was supposed to validate this but failed for **architectural** reasons (warm-start scale mismatch), not loss reasons. **Direct SSIM optimization** is still theoretically motivated; re-test in v18 with proper initialization.
+### Lesson 4: **Optimize What You Measure, but Only as a Controlled Ablation**
+v14 (L1 only) → 0.7080. v17 (L1+SSIM) failed for **architectural** reasons (warm-start scale mismatch), not necessarily loss reasons. v19 then showed that stacking L1+MS-SSIM+VGG can still diverge. Direct SSIM/MS-SSIM optimization remains theoretically motivated, but it should be tested one term at a time against v20_fixed.
 
 ### Lesson 5: **Loss Magnitudes Matter**
 λ_L1 = 100 vs λ_GP = 10 means the model effectively ignores adversarial. Either rebalance or accept that GAN is a small auxiliary signal.
@@ -283,6 +288,7 @@ HED loss is theoretically excellent (decomposes the actual stain physics). Pract
 |------|---------|
 | `src/models/losses.py` | PerceptualLoss, HEDStainLoss |
 | `train_v17.py:L1SSIMLoss` | L1 + SSIM combined loss |
-| `src/training/lightning_module_v11.py` | Best loss configuration (project best) |
+| `train_v20.py` | L1-only v20_fixed baseline run |
+| `src/training/lightning_module_v11.py` | Historical v11 hybrid-loss configuration |
 | `src/training/lightning_module_v15.py` | All 5 losses (v15 — caused divergence) |
 | `src/training/lightning_module_v16.py` | 4 losses without HED (still diverged) |

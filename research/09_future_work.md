@@ -1,10 +1,29 @@
-# 09: Future Work — The Path from 0.712 to 0.82+ SSIM
+# 09: Future Work — The Path from Final Ensemble to 0.82+ SSIM
 
-> **Bottom Line:** The clinical target (SSIM 0.82+) is achievable through a combination of better encoder (ResNet-34 ImageNet), better loss (MS-SSIM + perceptual without GAN), better data (SyN registration refinement, larger curated set), and better training (progressive resizing, warm-start chain). v18 is the recommended next major iteration; v19+ should pursue self-distillation and ensemble methods.
+> **Bottom Line:** v22A and v21B are complete. The current best pipeline is CLAHE TV-L1 + weighted TTA ensemble `0.20*v20 + 0.60*v22A + 0.20*v21B`, scoring SSIM 0.7838, PSNR 25.16, PCC 0.8794 on the fixed CLAHE same-prefix evaluation. The next path to 0.82+ is broader validated CLAHE data, not another immediate architecture swap.
 
 ---
 
-## 1. Recommended Next Model: v18
+## 0. Current Immediate Roadmap (2026-05-02)
+
+Completed:
+
+1. **v22A content-quality warm-start:** best internal SSIM 0.7655; fixed CLAHE TTA4 SSIM 0.7807.
+2. **v21B Hibou-B content-quality warm-start:** best internal SSIM 0.7544; fixed CLAHE TTA4 SSIM 0.7790.
+3. **Final fixed eval:** best CLAHE ensemble SSIM 0.7838, PSNR 25.16, PCC 0.8794.
+
+Next:
+
+1. **Promote the final ensemble app** with `best_stain_app.py` and keep v20 fallback for old registered inputs.
+2. **Scale CLAHE/content-quality training beyond top-1000** only after preserving a fixed holdout set.
+3. **Evaluate on a truly external slide/slide-region split** before making clinical-grade claims.
+4. **Improve registration failure handling** for the remaining difficult patches; registration remains the highest-leverage bottleneck.
+
+---
+
+## 1. Historical v18 Plan (Superseded by v19b/v20_fixed)
+
+The section below is retained for research history. Its main ideas (pretrained encoder, no GAN, progressive training) were partly validated by later v19b/v20 work, but the version labels are stale. The active baseline is now v20_fixed, not v18.
 
 **Goal:** Combine the best lessons from all prior versions into a single coherent model.
 
@@ -263,6 +282,7 @@ def ensemble_predict(x):
 | **Adding GAN back in** | v15/v16 instability; SSIM-incompatible objective |
 | **Training on all 8,885 pairs** | v13 data-quality failure |
 | **Random validation set** | v14 high variance; can't track convergence |
+| **Unaudited train/val split** | v19b/v20 prefix leakage; clean metrics require `overlap=0` |
 | **Aggressive augmentation** | Color jitter destroys H&E semantics |
 | **Increasing batch size for "speed"** | OOM at 1024×1024; gradient noise increases |
 | **Dropping ResNet encoder** | v17 may miss this; v11→v18 should keep it |
@@ -272,62 +292,71 @@ def ensemble_predict(x):
 ## 5. Recommended Roadmap
 
 ```
-v17 (current)
-  ├─ If SSIM ≥ 0.73: Build v18 with all improvements
-  └─ If SSIM < 0.73: Investigate why; rerun with fixes
+v20_fixed (frozen clean baseline)
+  ├─ Best epoch 77: SSIM 0.7606 / PSNR 24.92 / PCC 0.8652
+  ├─ TTA4: SSIM 0.7634
+  └─ App/deployment baseline
 
-v18 (next major)
-  ├─ ResNet-34 + MS-SSIM + Progressive training
-  ├─ Target: 0.76-0.80
-  └─ If achieved: build v19
+v21A (histology encoder ablation)
+  ├─ Hibou-B frozen encoder + decoder
+  ├─ Best: SSIM 0.7605 / PSNR 24.77 / PCC 0.8634
+  ├─ 55/45 v20/v21A TTA ensemble: SSIM 0.7649
+  └─ Keep for ensemble/secondary ablation, not primary app path
 
-v19 (refinement)
-  ├─ + SyN-refined registration
-  ├─ + Larger top-3000 dataset
-  ├─ + Self-distillation from v18
-  └─ Target: 0.80-0.82
+v22A (data/registration scaling, completed)
+  ├─ CLAHE TV-L1 registration: all-pair mean SSIM 0.5045, +0.0911 vs old
+  ├─ Content-quality top-1000: mean full SSIM 0.5601, content-gray 0.6223, gain +0.1152
+  ├─ Warm-start v20 from models/v20_fixed_model.pth
+  ├─ v22A TTA4 on CLAHE fixed eval: SSIM 0.7807 / PSNR 25.16 / PCC 0.8782
+  └─ Final v20+v22A+v21B TTA4 ensemble: SSIM 0.7838 / PSNR 25.08 / PCC 0.8789
 
-v20 (clinical-grade)
-  ├─ + Histology foundation model encoder
-  ├─ + Ensemble (v11 + v17 + v18 + v19)
-  └─ Target: 0.82-0.85
+v22B/v22C (next data ablations)
+  ├─ v22B: best-of-old-vs-CLAHE top-1000 warm-start
+  ├─ v22C: content-quality or best-of top-1500 warm-start
+  └─ Pick by fixed external validation, not internal split alone
 ```
 
 ---
 
-## 6. Resource Budget for v18
+## 6. Resource Budget for Next Runs
 
 | Resource | Estimate |
 |----------|----------|
-| GPU hours | 12-15 hours (A100 80GB) |
-| RAM | 32 GB |
-| Disk | 20 GB (dataset cached + checkpoints) |
-| Engineering effort | 2-3 days |
-| Risk | Low (all components proven individually) |
+| v22A content-quality warm-start | Complete; use `models/v22a_content_quality_top1000_ft_model.pth` |
+| v22B best-of warm-start | ~1-1.5 GPU hours |
+| TTA/checkpoint averaging | Minutes to 1 hour for validation sweep |
+| v21B Hibou-B rerun on new data | Complete for top-1000; future reruns should use larger data only if the fixed eval gate is clear |
+| RAM | 32 GB is enough; cached top-1000 pairs use about 6 GB |
+| Disk | Keep only latest best checkpoint per run where possible |
+| Risk | Low for continuation/TTA; medium for new encoder compatibility |
 
 ---
 
 ## 7. Open Research Questions
 
-1. **What is the registration ceiling?** — Can hybrid TV-L1+SyN reach mean SSIM 0.75 on the top tier?
-2. **Does GAN ever help when stable?** — Could a carefully balanced GAN (λ=0.5) help v18 cross 0.80?
-3. **Is the ImageNet→histology domain gap exploitable?** — Would a histology-pretrained encoder (CTransPath) outperform ResNet-34?
-4. **Can we get more registered pairs?** — How does scaling top-tier from 1k to 3k affect convergence?
-5. **What's the irreducible noise floor?** — How much SSIM is lost purely to registration imperfection?
+1. **How far does content-quality selection scale?** Top-1000 improved the CLAHE fixed eval; top-1500/top-2000 should test diversity.
+2. **Which data policy is best: full-SSIM, best-of, positive-only, or content-quality?**
+3. **Is top-1000 too narrow?** Top-1500 may trade slightly lower registration quality for better slide/tissue diversity.
+4. **Can Hibou-style models win as single models?** v21B helped the final ensemble but still did not beat v22A alone.
+5. **Can we design an external validation set that is stable across data-selection experiments?**
 
 ---
 
 ## 8. Closing Synthesis
 
-The journey from 0.26 (v1-7) to 0.712 (v11) is mostly the story of three things:
+The journey from 0.26 (v1-7) to 0.712 (v11) was mostly the story of three things:
 1. **Registration** — TV-L1 unlocked GAN training
 2. **Encoder** — ImageNet ResNet-34 added universal priors
 3. **Perceptual loss** — VGG-19 features added biological awareness
 
-The journey from 0.712 to 0.82 is likely the story of three more:
-1. **Direct metric optimization** — MS-SSIM instead of indirect GAN
-2. **Better data** — SyN refinement + larger curated set
-3. **Compositional training** — Progressive resizing + warm-start chain
+The journey from 0.712 to clean 0.7606 added two more:
+1. **Stable non-adversarial training** — L1-only was more reliable than stacked losses
+2. **Stronger pretrained encoder** — ConvNeXt-Base LAION improved the clean baseline when paired with a correct split
+
+The remaining path to 0.82 is likely:
+1. **Clean evaluation discipline** — no unaudited validation splits
+2. **Domain-specific pretraining** — histology encoder ablation against v20_fixed
+3. **Better data when proven** — CLAHE registration has now passed controlled, full-dataset, and fixed-evaluation checks; the next question is whether scaling beyond top-1000 improves without losing registration quality
 
 GANs are not in either list. **The path forward is non-adversarial.**
 
@@ -337,8 +366,16 @@ GANs are not in either list. **The path forward is non-adversarial.**
 
 | File | Purpose |
 |------|---------|
-| `train_v17.py` | Current SOTA attempt |
-| `train_v18.py` (TBD) | Next iteration — to be written |
+| `best_stain_app.py` | Final app for balanced v20/v22A/v21B TTA ensemble |
+| `best_model_manifest.json` | Final model weights, modes, scores, and runtime notes |
+| `APP_DISTRIBUTION.md` | App run/build/distribution handoff |
+| `train_v20.py` | v20_fixed clean baseline |
+| `train_v20_csv_variant.py` | v22A/v22B warm-start runner for CSV variants |
+| `logs/v20_fixed_training.log` | v20_fixed clean metrics |
+| `logs/v22a_content_quality_top1000_ft_training.log` | Completed v22A warm-start metrics |
+| `v20_stain_app.py` | Legacy/simple inference app for v20-style weights |
+| `registration_pipeline_clahe.py` | CLAHE TV-L1 registration pipeline |
+| `data/processed/content_quality_csvs/` | Content-quality training CSVs |
 | `research/05_loss_functions.md` | MS-SSIM details |
 | `research/02_image_registration.md` | SyN evaluation |
 | `research/04_training_history.md` | All prior version results |

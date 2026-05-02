@@ -1,6 +1,6 @@
 # 03: Model Architectures — All Generators & Discriminators
 
-> **Bottom Line:** We explored five major architectural families. The most successful was the **U-Net Generator with ResNet-34 Encoder + 70×70 PatchGAN Discriminator**, used in v11 (best result: 0.712 SSIM). We later experimented with **Attention U-Net + MultiScale Discriminator** (v15, v16) and pure **U-Net (4-level and 5-level)** (v14, v17).
+> **Bottom Line:** The strongest single CLAHE model is the ConvNeXt-Base v22A warm-start, but the best overall result is an ensemble: `0.20*v20 + 0.60*v22A + 0.20*v21B`, all TTA4, with SSIM 0.7838, PSNR 25.16, PCC 0.8794. Hibou-B did not win alone but improved the final ensemble slightly.
 
 ---
 
@@ -155,6 +155,43 @@ Output (3, 1024, 1024)
 
 ---
 
+### 1.6. ConvNeXt-Base LAION-2B U-Net (v20, v20_fixed, v22A warm-start)
+
+U-Net decoder from `segmentation_models_pytorch` with a timm ConvNeXt-Base encoder pretrained on LAION-2B/CLIP-style web images.
+
+```python
+model = smp.Unet(
+    encoder_name="tu-convnext_base.clip_laion2b",
+    encoder_weights="laion2b",
+    in_channels=3,
+    classes=3,
+    activation="sigmoid",
+)
+```
+
+**File:** `train_v20.py`
+
+**Used in:** v20 and v20_fixed
+
+**Result:**
+- old v20: SSIM 0.7549, but leaky train/val split
+- v20_fixed: SSIM 0.7606, PSNR 24.92, PCC 0.8652, clean 900/100 split with `overlap=0`
+- v22A warm-start: same architecture initialized from `models/v20_fixed_model.pth`, trained on content-quality CLAHE top-1000; best single CLAHE fixed-eval result with TTA4 was SSIM 0.7807, PSNR 25.16, PCC 0.8782
+
+**Verdict:** Current best deployable architecture family. The main lesson is that a stronger pretrained encoder plus a simple L1 objective beats adding more losses or adversarial machinery. Better registered labels did help on the CLAHE fixed evaluation, and the best final result came from using v22A as the largest-weight member of a small TTA ensemble.
+
+### 1.7. Hibou-B Frozen Feature Decoder (v21A)
+
+Hibou-B is a histology-pretrained DINOv2-style model with register tokens. It cannot be dropped into `segmentation_models_pytorch.Unet` as a standard encoder because its token downsampling pattern is not a normal CNN pyramid. The v21A workaround froze Hibou-B and trained a lightweight high-resolution decoder with input skips.
+
+**Result:** SSIM 0.7605, PSNR 24.77, PCC 0.8634. This matched v20_fixed but did not beat it.
+
+**Ensemble Result:** v20/v21A 55/45 weighted 4-flip TTA reached SSIM 0.7649, PSNR 25.11, PCC 0.8710.
+
+**Verdict:** Useful as a complementary model and research ablation, but not the primary deployable architecture due to gated dependency, redistribution complexity, and no single-model win.
+
+---
+
 ## 2. Discriminator Architectures
 
 ### 2.1. 70×70 PatchGAN ⭐ **(STANDARD)**
@@ -248,6 +285,11 @@ $F(G(X)) \approx X$ and $G(F(Y)) \approx Y$.
 | v15 | Attention U-Net | MultiScale | Attention | ImageNet | Hybrid + HED | 0.7199 (then diverged) |
 | v16 | Attention U-Net | MultiScale | Attention | ImageNet | Hybrid (no HED) | 0.6976 (then diverged) |
 | v17 | Simple 5-level U-Net | None (no GAN) | Standard | No (broken warm-start from v14) | L1+SSIM | 0.379 ❌ |
+| v19b | ResNet-34 smp.Unet | None | Standard | ImageNet | L1 only | 0.7489 (leaky) |
+| v20 | ConvNeXt-Base smp.Unet | None | Standard | LAION-2B | L1 + elastic aug | 0.7549 (leaky) |
+| **v20_fixed** ⭐ | **ConvNeXt-Base smp.Unet** | **None** | **Standard** | **LAION-2B** | **L1 + elastic aug** | **0.7606 clean** |
+| v21A | Hibou-B frozen + decoder | None | Token decoder | Histology | L1 + elastic aug | 0.7605 clean |
+| v22A | ConvNeXt-Base smp.Unet warm-start | None | Standard | LAION-2B | L1 + elastic aug | 0.7807 TTA4 on CLAHE fixed eval |
 
 ---
 
@@ -255,6 +297,8 @@ $F(G(X)) \approx X$ and $G(F(Y)) \approx Y$.
 
 ### Insight 1: Pretrained Encoder is Highly Beneficial
 The transition from random-init U-Net (v1-v7, achieved 0.26) to ResNet-34 ImageNet encoder (v8+, achieved 0.706+) was a major leap. ImageNet features encode useful priors (edges, color patterns) that transfer to histology.
+
+v20_fixed extends this: ConvNeXt-Base LAION-2B reached 0.7606 on the clean split. The v21A result shows that histology-pretrained features are not automatically better when the decoder and feature hierarchy are constrained. The current priority is to test better labels/data with the stable v20 architecture before adding another encoder variable.
 
 ### Insight 2: Simpler ≠ Worse
 The simple U-Net (v14) **outperformed** the complex Attention U-Net + MultiScale Disc (v16) on full-size images:
@@ -273,7 +317,7 @@ The simple U-Net (v14) **outperformed** the complex Attention U-Net + MultiScale
 **Conclusion:** For SSIM-targeted optimization, removing the discriminator (v14, v17) actually helps because adversarial loss can pull the model away from the SSIM-minimum solution.
 
 ### Insight 4: 5-Level vs 4-Level U-Net
-At 1024×1024 input, a 4-level U-Net has bottleneck at 64×64. This may not capture full tissue-level context. The 5-level variant (bottleneck 32×32) was tested in v17 but training failed due to warm-start scale mismatch — not the architecture's fault. **5-level remains a valid choice for v18, but with proper init** (ResNet-34 ImageNet) instead of warm-start from a 4-level parent.
+At 1024×1024 input, a 4-level U-Net has bottleneck at 64×64. This may not capture full tissue-level context. The 5-level variant (bottleneck 32×32) was tested in v17 but training failed due to warm-start scale mismatch — not the architecture's fault. A 5-level model remains a valid future ablation, but only with proper initialization and the same clean split used by v20_fixed.
 
 ### Insight 5: Activation Functions
 - **Tanh output** (Pix2Pix style, $[-1, 1]$) requires `(image - 0.5) * 2` normalization
@@ -290,6 +334,7 @@ At 1024×1024 input, a 4-level U-Net has bottleneck at 64×64. This may not capt
 | `src/models/losses.py` | PerceptualLoss, HEDStainLoss |
 | `train_v14.py` | Simple 4-level U-Net (defined inline) |
 | `train_v17.py` | Simple 5-level U-Net (defined inline) |
+| `train_v20.py` | ConvNeXt-Base LAION-2B U-Net (`v20_fixed`) |
 | `src/training/lightning_module_v11.py` | v11 weakly supervised (best model) |
 | `src/training/lightning_module_v15.py` | v15 (multi-scale + attention + HED) |
 | `src/training/lightning_module_v16.py` | v16 (multi-scale + attention, no HED) |

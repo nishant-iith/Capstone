@@ -1,6 +1,6 @@
-# 04: Training History — Complete Chronology of All 17 Versions
+# 04: Training History — Complete Chronology Through Final Ensemble
 
-> **Bottom Line:** Best result: **v19b = SSIM 0.7489** (DenseUNet + ResNet-34, L1-only, ep 80, stable). v11 prior best 0.712. v19 (full loss) diverged. v17r1 failed warm-start. v17r2 abandoned (ceiling ~0.62). Next: add MS-SSIM + VGG to v19b arch → target 0.77+.
+> **Bottom Line:** The best current pipeline is **CLAHE TV-L1 + TTA4 weighted v20/v22A/v21B ensemble = SSIM 0.7838, PSNR 25.16, PCC 0.8794**. v20_fixed remains the best old-registered fallback at SSIM 0.7634 with TTA4. Historical v19b (0.7489) and old v20 (0.7549) were stable and useful, but their validation split leaked: 91/100 validation prefixes overlapped training.
 
 ---
 
@@ -9,7 +9,7 @@
 ```
 Phase 1 (v1-v7):  Pix2Pix on unregistered data → SSIM 0.26 (failure baseline)
 Phase 2 (v8-v10): Pix2Pix + Registration       → SSIM 0.706 (Turbo Pix2Pix)
-Phase 3 (v11):   + VGG-19 Perceptual Loss      → SSIM 0.712 ⭐ (BEST EVER)
+Phase 3 (v11):   + VGG-19 Perceptual Loss      → SSIM 0.712
 Phase 4 (v12):   + HED Stain Loss               → Failed
 Phase 5 (v13):   Attention U-Net + MultiScale   → SSIM 0.6326 (data quality limited)
 Phase 6 (v14):   Simple U-Net + Patches         → SSIM 0.7080 (clean baseline)
@@ -18,7 +18,13 @@ Phase 8 (v16):   v15 minus HED, full-size       → SSIM 0.6976 (then diverged)
 Phase 9  (v17r1): 5-level U-Net + SSIM + wrong warm-start → SSIM 0.379 (FAILED)
 Phase 9  (v17r2): same arch, Kaiming init, batch=20     → abandoned (ceiling ~0.62)
 Phase 10 (v19):   DenseUNet + ResNet-34 + L1+MS-SSIM+VGG → diverged (FAILED)
-Phase 10 (v19b):  DenseUNet + ResNet-34 + L1 only        → SSIM 0.7489 ⭐ NEW BEST
+Phase 10 (v19b):  DenseUNet + ResNet-34 + L1 only        → SSIM 0.7489 (leaky split)
+Phase 11 (v20):   ConvNeXt-Base LAION + L1 + elastic aug → SSIM 0.7549 (leaky split)
+Phase 11 (v20_fixed): same v20 recipe + clean split      → SSIM 0.7606 clean
+Phase 12 (v21A): Hibou-B frozen feature decoder          → SSIM 0.7605 clean
+Phase 13 (v22A): v20 warm-start + content-quality CLAHE  → internal SSIM 0.7655; fixed CLAHE TTA 0.7807
+Phase 14 (v21B): Hibou-B warm-start + content-quality    → internal SSIM 0.7544; fixed CLAHE TTA 0.7790
+Final ensemble: 0.20*v20 + 0.60*v22A + 0.20*v21B TTA4 → fixed CLAHE SSIM 0.7838
 ```
 
 ---
@@ -67,7 +73,7 @@ Phase 10 (v19b):  DenseUNet + ResNet-34 + L1 only        → SSIM 0.7489 ⭐ NEW
 
 ---
 
-### v11: Weakly Supervised Hybrid GAN ⭐ **(PROJECT BEST)**
+### v11: Weakly Supervised Hybrid GAN
 
 **Phase Goal:** Break 0.71 SSIM ceiling with perceptual feature matching
 **Data:** TV-L1 registered, 1,000 images (good slides only)
@@ -94,7 +100,7 @@ $$
 
 **Best Checkpoint:** `ws-epoch=27-val_ssim=0.712.ckpt`
 
-**Verdict:** ⭐ This is the **project's best model to date.** Despite 6 subsequent attempts (v12-v17), nothing has surpassed this result.
+**Verdict:** This was the first stable high-quality model and the long-running baseline. Later clean-split v20_fixed has surpassed its SSIM, but v11 remains important because it proved the value of registration, pretrained encoding, and perceptual loss.
 
 **Why it worked:**
 1. Registration foundation (TV-L1)
@@ -318,7 +324,7 @@ loss = 0.5 * L1(pred, target) + 0.5 * (1 - SSIM(pred, target))
 | v8 | ResNet U-Net + PatchGAN | TV-L1 1k | L1+WGAN-GP | 0.65 | OK |
 | v9 | + augmentation | TV-L1 1k | L1+WGAN-GP | 0.68 | OK |
 | v10 | Pix2Pix Turbo | TV-L1 1k | L1+WGAN-GP | 0.706 | Good |
-| **v11** ⭐ | + VGG-19 + Sobel | TV-L1 1k | Hybrid | **0.712** | **PROJECT BEST** |
+| v11 | + VGG-19 + Sobel | TV-L1 1k | Hybrid | 0.712 | Historic clean baseline |
 | v12 | + HED | TV-L1 1k | Hybrid + HED | (failed) | Diverged |
 | v13 | Attention + MultiScale | TV-L1 8.8k (mean 0.51) | Hybrid + HED | 0.6326 | Data quality limited |
 | v14 | Simple U-Net | 3.6k patches (mean 0.625) | L1 only | 0.7080 | Clean baseline |
@@ -327,11 +333,17 @@ loss = 0.5 * L1(pred, target) + 0.5 * (1 - SSIM(pred, target))
 | v17r1 | 5-level Simple U-Net (warm-start v14) | Top-1k full-size | L1 + SSIM | 0.3790 | ❌ Failed — wrong-scale warm-start |
 | v17r2 | 5-level Simple U-Net (Kaiming, batch=20) | Top-1k full-size | L1 + SSIM | ~0.60 ceiling | ❌ Abandoned — ceiling too low |
 | v19 | DenseUNet + ResNet-34 | Top-1k full-size | L1+MS-SSIM+VGG | diverged | ❌ Failed |
-| **v19b** ⭐ | **DenseUNet + ResNet-34** | **Top-1k full-size** | **L1 only** | **0.7489** | **✅ PROJECT BEST** |
+| v19b | DenseUNet + ResNet-34 | Top-1k full-size | L1 only | 0.7489 | Stable but leaky split |
+| v20 | ConvNeXt-Base LAION-2B U-Net | Top-1k full-size | L1 + elastic aug | 0.7549 | Stable but leaky split |
+| **v20_fixed** ⭐ | **ConvNeXt-Base LAION-2B U-Net** | **Top-1k full-size, clean 900/100 split** | **L1 + elastic aug** | **0.7606** | **Clean old-registered baseline single model** |
+| v21A | Hibou-B frozen feature decoder | Top-1k full-size, clean split | L1 + elastic aug | 0.7605 | Matched v20, ensemble member |
+| v22A | v20 warm-start ConvNeXt U-Net | content-quality CLAHE top-1000 | L1 + elastic aug | 0.7655 internal; 0.7807 TTA4 fixed CLAHE eval | Best single model on CLAHE fixed eval |
+| v21B | Hibou-B decoder warm-start | content-quality CLAHE top-1000 | L1 + elastic aug | 0.7544 internal; 0.7790 TTA4 fixed CLAHE eval | Useful ensemble complement, not best single |
+| Final ensemble | v20 + v22A + v21B TTA4 | CLAHE fixed eval | Inference blend | 0.7838 SSIM | Best overall fixed-eval result |
 
 ---
 
-### v19b: DenseUNet + ResNet-34 + L1-Only (PROJECT BEST)
+### v19b: DenseUNet + ResNet-34 + L1-Only (Historical Leaky Baseline)
 
 **Phase Goal:** Apply v19 arch with stable L1-only loss (v19 full-loss diverged)
 **Data:** Top-1000 full-size pairs (mean SSIM 0.6094)
@@ -357,11 +369,135 @@ loss = 0.5 * L1(pred, target) + 0.5 * (1 - SSIM(pred, target))
 
 **Behavior:** Monotonic improvement, no divergence. Loss declined 0.1938 → 0.0301. Cosine LR kept squeezing gains to final epoch.
 
-**Verdict:** ✅ **PROJECT BEST SSIM 0.7489** — +3.7% over v11 (0.712). Confirms: ResNet-34 encoder + L1 + cosine LR = stable high-quality baseline. Next step: add MS-SSIM + VGG perceptual losses.
+**Verdict:** Stable and valuable as an architecture/loss signal, but no longer a clean validation claim. A later audit found the train and validation datasets were independently shuffled and sliced, which produced 91/100 overlapping validation prefixes. Keep the lesson: pretrained encoder + L1 + cosine LR is stable. Do not report 0.7489 as clean generalization.
 
 **File:** `train_v19b.py`, model: `models/v19b_model.pth`, best ckpt: `checkpoints/v19b/v19b_e080_ssim0.7489.pth`
 
 ---
+
+### v20: ConvNeXt-Base LAION-2B + L1 + Elastic Aug (Historical Leaky Baseline)
+
+**Phase Goal:** Test whether a stronger general-purpose pretrained encoder beats ResNet-34 while keeping the stable L1-only recipe.
+**Data:** Top-1000 full-size TV-L1 pairs
+**Architecture:** `smp.Unet(encoder_name="tu-convnext_base.clip_laion2b", encoder_weights="laion2b")`
+**Loss:** L1 only
+**Augmentation:** Elastic deformation on the unstained input only (`alpha=60`, `sigma=6`, `p=0.5`), plus paired geometric augmentation
+
+**Historical Result:** SSIM 0.7549 at epoch 74, best checkpoint `checkpoints/v20/v20_e074_ssim0.7549.pth`.
+
+**Caveat:** Same overlapping-split bug as v19b. Treat 0.7549 as evidence that ConvNeXt + L1 + elastic aug is promising, not as a clean validation score.
+
+**File:** `train_v20.py` before the 2026-05-01 split fix, model: `models/v20_model.pth`
+
+---
+
+### v20_fixed: ConvNeXt-Base LAION-2B + L1 + Elastic Aug (Clean Baseline)
+
+**Phase Goal:** Rerun v20 correctly with a single deterministic split and no train/val prefix overlap.
+**Data:** Top-1000 full-size TV-L1 pairs, split once with seed 42 into 900 train / 100 val.
+**Architecture:** Same as v20: ConvNeXt-Base LAION-2B encoder + U-Net decoder.
+**Loss:** L1 only.
+**Augmentation:** Elastic deformation on unstained training inputs only; validation augmentation disabled.
+
+**Split Fix:**
+```python
+split_perm = np.random.RandomState(SEED).permutation(len(df))
+train_indices = split_perm[:900]
+val_indices = split_perm[900:1000]
+assert len(train_prefixes & val_prefixes) == 0
+```
+
+**Final Clean Result (completed 2026-05-01):**
+
+| Epoch | Val SSIM | PSNR | PCC | Notes |
+|-------|----------|------|-----|-------|
+| 23 | 0.7538 | 24.58 | 0.8590 | earlier snapshot |
+| 54 | 0.7597 | 24.88 | 0.8640 | late-stage gain |
+| **77** | **0.7606** | **24.92** | **0.8652** | **best checkpoint** |
+| 80 | 0.7606 | 24.93 | 0.8653 | final epoch |
+
+**Verdict:** Best clean single-model baseline. It beats the old leaky v20 score under an audited `overlap=0` split and is the strongest practical model for the app. It also remains slightly ahead of the v21A Hibou-B frozen-feature experiment.
+
+**Files:** `train_v20.py`, `logs/v20_fixed_training.log`, `checkpoints/v20_fixed/`, final model path `models/v20_fixed_model.pth`
+
+---
+
+### v21A: Hibou-B Frozen Feature Decoder
+
+**Phase Goal:** Test whether histology-pretrained Hibou-B features beat the clean ConvNeXt v20 baseline.
+
+**Setup:**
+- Backbone: `histai/hibou-b`, loaded through Hugging Face with `trust_remote_code=True`.
+- Feature shape: DINOv2-style tokens with registers, 768-dimensional hidden state.
+- Training design: frozen Hibou-B encoder plus high-resolution input-skip decoder.
+- Data: same clean 900/100 split discipline, no train/val overlap.
+
+**Result:** Best epoch 97: SSIM 0.7605, PSNR 24.77, PCC 0.8634. Early stopped at epoch 117.
+
+**Inference/ensemble ablation:**
+
+| Setup | SSIM | PSNR | PCC |
+|-------|------|------|-----|
+| v20 base | 0.7606 | 24.92 | 0.8652 |
+| v20 TTA4 | 0.7634 | 25.03 | 0.8684 |
+| v21A base | 0.7605 | 24.77 | 0.8634 |
+| v21A TTA4 | 0.7626 | 24.86 | 0.8659 |
+| 55/45 v20/v21A TTA ensemble | **0.7649** | **25.11** | **0.8710** |
+
+**Verdict:** Hibou-B is technically valid and complementary enough for a small ensemble gain, but it did not beat v20_fixed as a single model. Because it also introduces gated-model and redistribution complexity, v20 remains the primary deployable model.
+
+**Files:** `train_v21a_hibou_b.py`, `logs/v21a_hibou_b_training.log`, `eval_tta_ensemble.py`, `eval_weighted_ensemble_fast.py`
+
+---
+
+### Registration/Data Upgrade: CLAHE TV-L1 and Content-Quality CSVs
+
+**Phase Goal:** Improve paired-label quality before changing the model. The central hypothesis was that v20 may be capped by registration noise more than architecture capacity.
+
+**Registration result:** Full CLAHE TV-L1 registration on 8,885 pairs improved all-pair mean SSIM from 0.4134 to 0.5045, a mean gain of +0.0911. The top-1000 mean increased from 0.6094 to 0.6423 while preserving all 13 slides.
+
+**Content-aware selection result:** Foreground tissue masking was not useful because these patches are essentially all tissue, but edge/content-aware scoring changed rankings substantially. The selected content-quality top-1000 has mean full RGB SSIM 0.5601, mean content-gray SSIM 0.6223, mean content fraction 0.5516, mean gain +0.1152, and zero negative-gain rows.
+
+**Training CSVs created:**
+- `data/processed/training_csv_variants/registered_bestof_old_clahe_top1000.csv`
+- `data/processed/training_csv_variants/registered_clahe_positive_top1000.csv`
+- `data/processed/content_quality_csvs/content_quality_minrgb0.50_positive_top1000.csv`
+
+**Interpretation:** Full-SSIM top-1000 is cleaner/easier, but content-quality top-1000 is richer and has much larger registration improvement. These validation scores will not be directly comparable unless evaluated on a fixed external validation set, because the content-quality validation split is harder and compositionally different.
+
+---
+
+### v22A: v20 Warm-Start on Content-Quality Top-1000 (Active)
+
+**Phase Goal:** Test whether the new high-content, positive-gain CLAHE dataset can improve a v20-style model quickly.
+
+**Setup:**
+- Architecture: same ConvNeXt-Base LAION-2B U-Net as v20_fixed.
+- Initialization: warm-start from `models/v20_fixed_model.pth`.
+- Data: `data/processed/content_quality_csvs/content_quality_minrgb0.50_positive_top1000.csv`.
+- Split: seed 42, 900 train / 100 val, `overlap=0`.
+- LR: encoder 5e-6, decoder 5e-5.
+- Max epochs: 40, patience 10.
+
+**Early log snapshot (2026-05-02):**
+
+| Epoch | Val SSIM | PSNR | PCC | Notes |
+|-------|----------|------|-----|-------|
+| 1 | 0.6974 | 21.62 | 0.9158 | warm-start adaptation begins |
+| 2 | 0.7360 | 23.82 | 0.9318 | large immediate improvement |
+| 3 | 0.7283 | 23.14 | 0.9314 | temporary dip |
+| 4 | 0.7374 | 23.72 | 0.9331 | early best |
+| 6 | 0.7514 | 24.04 | 0.9368 | large jump |
+| 8 | 0.7528 | 24.33 | 0.9395 | new best |
+| 9 | 0.7570 | 24.56 | 0.9409 | earlier best |
+| 12 | 0.7531 | 24.55 | 0.9402 | patience 3/10 |
+| 13 | 0.7563 | 24.61 | 0.9407 | patience 4/10; close to best |
+| 14 | 0.7526 | 24.42 | 0.9409 | patience 5/10 |
+| **15** | **0.7580** | **24.68** | **0.9421** | **new best; checkpoint saved** |
+
+**Important comparison caveat:** This validation split is not the same as the v20_fixed validation split. It is content-rich and harder, so the internal SSIM should not be compared numerically against v20_fixed's 0.7606 as if it were the same test set. Use it to judge convergence and then run a fixed external evaluation for model claims.
+
+**Files:** `train_v20_csv_variant.py`, `logs/v22a_content_quality_top1000_ft_training.log`, `checkpoints/v22a_content_quality_top1000_ft/`
 
 ## Key Inflection Points
 
@@ -370,19 +506,20 @@ loss = 0.5 * L1(pred, target) + 0.5 * (1 - SSIM(pred, target))
 3. **VGG-19 Perceptual Loss (v11):** SSIM 0.706 → 0.712 (+0.006)
 4. **Data Curation (v14):** All-pairs (0.51 mean) → curated patches (0.625 mean) → SSIM 0.6326 → 0.7080
 5. **GAN Removal (v17):** Stability over architectural complexity
-6. **ResNet-34 encoder + cosine LR (v19b):** SSIM 0.712 → 0.7489 (+0.037, new project best)
+6. **ResNet-34 encoder + cosine LR (v19b):** SSIM 0.712 → 0.7489, but later found leaky
+7. **ConvNeXt-Base LAION + elastic aug + clean split (v20_fixed):** SSIM 0.7606 with overlap=0
+8. **Histology encoder ablation (v21A Hibou-B):** matched v20 at SSIM 0.7605, ensemble TTA reached 0.7649
+9. **CLAHE registration/data curation (v22A/v21B input):** all-pair registration mean SSIM +0.0911; final CLAHE fixed-eval ensemble reached SSIM 0.7838
 
 ---
 
-## What v18 Should Do (Per Research Recommendations)
+## What the Next Version Should Do
 
-Based on all 17 prior experiments, the highest-impact next moves are:
+The next version should continue changing one thing at a time:
 
-1. **ResNet-34 ImageNet pretrained encoder** (v11 had this, v17 dropped it)
-2. **MS-SSIM loss** (multi-scale, captures structure at all resolutions)
-3. **Residual blocks in decoder** (better gradient flow at full-size)
-4. **Progressive training** (train at 512px, fine-tune at 1024px)
+1. **Scale the proven CLAHE/content-quality recipe** from top-1000 to top-1500/top-2000 while preserving slide diversity.
+2. **Test best-of-old-vs-CLAHE selection** with the same warm-start runner to isolate registration quality from content-quality ranking.
+3. **Keep v22A as the deployable base** unless a larger clean-data run beats the final TTA ensemble on the same fixed eval.
+4. **Use Hibou-style models as ensemble complements** until a domain encoder wins as a single deployable model.
 
-**Expected:** SSIM 0.76-0.80
-
-See [09_future_work.md](09_future_work.md) for the full plan.
+See [09_future_work.md](09_future_work.md) and [10_out_of_the_box_improvements.md](10_out_of_the_box_improvements.md) for the current plan.

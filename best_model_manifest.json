@@ -1,0 +1,60 @@
+{
+  "name": "Virtual H&E final weighted ensemble",
+  "date": "2026-05-02",
+  "default_mode": "balanced",
+  "input_pipeline": "CLAHE TV-L1 registered RGB inputs; CLAHE is used for registration flow estimation, not as inference-time image preprocessing.",
+  "inference": {
+    "tta": "4-flip",
+    "weights_best_ssim": {
+      "v20_fixed": 0.30,
+      "v22a_content_quality": 0.50,
+      "v21b_hibou_content_quality": 0.20
+    },
+    "weights_balanced": {
+      "v20_fixed": 0.20,
+      "v22a_content_quality": 0.60,
+      "v21b_hibou_content_quality": 0.20
+    }
+  },
+  "models": {
+    "v20_fixed": "models/v20_fixed_model.pth",
+    "v22a_content_quality": "models/v22a_content_quality_top1000_ft_model.pth",
+    "v21b_hibou_content_quality": "models/v21b_hibou_content_quality_ft_model.pth"
+  },
+  "hibou_runtime": {
+    "model_id": "histai/hibou-b",
+    "offline_bundle_path": "models/hibou-b",
+    "notes": "For the best ensemble, v21B needs Hibou-B code/config. Put a local Hugging Face snapshot at models/hibou-b or set HIBOU_MODEL_PATH. v22_tta and v20_tta modes do not need Hibou-B."
+  },
+  "fixed_validation_scores": {
+    "old_registered_best": {
+      "method": "v20_tta4",
+      "ssim": 0.7634,
+      "psnr": 25.03,
+      "pcc": 0.8684
+    },
+    "clahe_same_prefixes_best_ssim": {
+      "method": "0.30*v20 + 0.50*v22A + 0.20*v21B, all TTA4",
+      "ssim": 0.7838,
+      "psnr": 25.08,
+      "pcc": 0.8789
+    },
+    "clahe_same_prefixes_balanced": {
+      "method": "0.20*v20 + 0.60*v22A + 0.20*v21B, all TTA4",
+      "ssim": 0.7838,
+      "psnr": 25.16,
+      "pcc": 0.8794
+    },
+    "clahe_single_best": {
+      "method": "v22A_tta4",
+      "ssim": 0.7807,
+      "psnr": 25.16,
+      "pcc": 0.8782
+    }
+  },
+  "artifacts": {
+    "summary": "logs/final_v21b_v22a_eval_summary.txt",
+    "per_pair_scores": "logs/final_v21b_v22a_eval_per_pair.csv",
+    "app": "best_stain_app.py"
+  }
+}

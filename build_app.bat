@@ -1,7 +1,10 @@
 @echo off
 echo ============================================
-echo  Virtual H^&E Stain Generator -- Build App
+echo  Virtual H^&E Stain Generator -- LEGACY v11 Build App
 echo ============================================
+echo.
+echo This builds the historical app.py path, not the current best model.
+echo For the final v20/v22A/v21B app, use build_best_portable_windows.bat.
 echo.
 
 REM Install PyInstaller if missing
@@ -74,7 +77,7 @@ echo Zip file:      dist\VirtualHEStain_v1.zip
 echo.
 echo DISTRIBUTE:
 echo   1. Share VirtualHEStain_v1.zip
-echo   2. Share v7-epoch=022-val_ssim=0.2674.ckpt  (538 MB, separately)
+echo   2. Share the historical v11 checkpoint separately if using this legacy app.
 echo.
 echo USER INSTRUCTIONS:
 echo   1. Extract VirtualHEStain_v1.zip

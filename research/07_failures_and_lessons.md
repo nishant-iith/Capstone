@@ -1,10 +1,10 @@
 # 07: Failures and Lessons — What Went Wrong, What We Learned
 
-> **Bottom Line:** Of 17 model versions, ~7 were outright failures or diverged. Each failure taught a specific lesson. The recurring themes: (1) GAN instability dominates loss/architecture choices, (2) data quality has higher leverage than architecture complexity, (3) numerical stability of "elegant" losses must be tested first, (4) more loss terms ≠ better model.
+> **Bottom Line:** Across v1-v22A, the main failures were not just model failures; several were evaluation and data-quality failures. The recurring themes: (1) GAN instability dominates loss/architecture choices, (2) data quality has higher leverage than architecture complexity, (3) numerical stability of "elegant" losses must be tested first, (4) more loss terms ≠ better model, (5) validation splits must be audited by image identity/prefix, and (6) registration improvements must be measured per pair before retraining.
 
 ---
 
-## 1. The Seven Major Failures
+## 1. The Major Failures
 
 ### Failure 1: Pre-Registration Era (v1-v7)
 
@@ -160,6 +160,32 @@
 
 ---
 
+### Failure 9: v19b/v20 Train-Val Prefix Leakage
+
+**What we tried:** v19b and the first v20 run created separate train and validation dataset instances, each shuffling the same top-1000 dataframe independently and then slicing to 900 and 100 samples.
+
+**Result:**
+- v19b reported SSIM 0.7489.
+- old v20 reported SSIM 0.7549.
+- A 2026-05-01 audit found **91/100 validation prefixes overlapped training**.
+
+**Why it failed:**
+1. Train and val were separated by count, not by a shared index split.
+2. Independent shuffles made the first 100 validation entries likely to also appear in the first 900 training entries.
+3. Validation augmentation was disabled, but identity leakage still made the metric optimistic.
+
+**Fix in v20_fixed:**
+```python
+split_perm = np.random.RandomState(SEED).permutation(len(df))
+train_indices = split_perm[:900]
+val_indices = split_perm[900:1000]
+assert len(train_prefixes & val_prefixes) == 0
+```
+
+**Lesson:** **A validation split is only real after an overlap audit.** For paired images, validate by stable pair identity or filename prefix. Do not rely on two dataset constructors to independently create compatible splits.
+
+---
+
 ## 2. Cross-Cutting Themes
 
 ### Theme 1: Loss Imbalance Is Insidious
@@ -218,6 +244,8 @@ For an SSIM-targeted project, the GAN is the wrong objective.
 
 v14's random validation image caused 0.166-0.605 epoch-to-epoch noise. This made early stopping nearly useless and obscured true convergence. Held-out fixed validation (v17) is mandatory for credible model selection.
 
+v19b/v20 added a second validation lesson: a fixed-looking validation loader can still leak if it is not created from a single shared split. Current standard: seeded split once, explicit indices, validation augmentation disabled, and `overlap=0` logged before epoch 1.
+
 ---
 
 ## 3. Failure Categorization
@@ -228,7 +256,7 @@ v14's random validation image caused 0.166-0.605 epoch-to-epoch noise. This made
 | **Numerical stability** | v12, v15 (HED), fp16 inverse | High — change loss, use fp32 |
 | **GAN divergence** | v15, v16 | Low — drop GAN |
 | **Configuration errors** | v17 OOM, dataloader errors | Trivial — config fix |
-| **Validation noise** | v14 random val | Easy — fix val set |
+| **Validation noise/leakage** | v14 random val, v19b/v20 prefix overlap | Easy to fix, high reporting risk |
 
 ---
 
@@ -274,11 +302,15 @@ Every v17 choice is a direct response to a prior failure:
 
 4. **Save logs to disk.** Terminal-only output is lost on disconnection. Use `tee` or Python's `logging.FileHandler`.
 
-5. **Fixed validation set, period.** No exceptions.
+5. **Fixed validation set, period.** No exceptions. Also audit overlap by filename prefix or stable pair ID.
 
 6. **GAN is high-risk, marginal-reward.** Use only if (a) the metric rewards realism (PSNR, FID), (b) you have time to debug instability, (c) the gain justifies the risk.
 
 7. **The data ceiling is real.** If your training set has mean SSIM 0.5, expect a model that maxes out around 0.65. No amount of architecture will fix this.
+
+8. **Full-image SSIM alone can over-select easy patches.** The CLAHE/content-quality analysis showed that high-content patches have lower full-image SSIM but larger registration gains. Future dataset selection should report full SSIM, content-region SSIM, content fraction, slide counts, and negative-gain rows.
+
+9. **Keep fallback paths.** CLAHE TV-L1 improved the mean strongly, but 80/8885 rows regressed. A best-of-old-vs-CLAHE CSV is safer than assuming one registration method wins every file.
 
 ---
 
@@ -292,3 +324,4 @@ Every v17 choice is a direct response to a prior failure:
 | `src/training/lightning_module_v16.py` | Diverged after 24 epochs |
 | `train_v14.py` | Random val (high variance) |
 | `train_v17.py` | All failure-driven fixes |
+| `train_v20.py` | Current v20_fixed split correction |

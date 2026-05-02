@@ -1,6 +1,6 @@
 # 08: Results Comparison — Comprehensive Metrics & Ablations
 
-> **Bottom Line:** v19b holds the project record at SSIM **0.7489** (ep 80, stable, no divergence). v11 previous best 0.7120. v14 (0.7080) simple baseline. v17r1 failed (warm-start). v17r2 abandoned (ceiling ~0.62). Gap to clinical target (0.82+) closable via MS-SSIM + VGG perceptual + better registration (see [09_future_work.md](09_future_work.md)).
+> **Bottom Line:** The current best fixed-eval pipeline is **CLAHE TV-L1 + TTA4 weighted v20/v22A/v21B ensemble = SSIM 0.7838, PSNR 25.16, PCC 0.8794**. On the old registered input distribution, **v20 TTA4 remains best at SSIM 0.7634**. Historical v19b (0.7489) and old v20 (0.7549) were stable but used an overlapping train/validation split, so they should not be reported as clean validation.
 
 ---
 
@@ -21,10 +21,24 @@
 | v17r1 | Simple 5-level U-Net (warm-start v14) | None | Top-1k full | L1+SSIM | 0.3790 | – | – | ❌ Failed (warm-start) |
 | v17r2 | Simple 5-level U-Net (Kaiming, batch=20) | None | Top-1k full | L1+SSIM | ~0.60 ceiling | – | – | ❌ Abandoned (ceiling too low) |
 | v19 | DenseUNet + ResNet-34 | None | Top-1k full | L1+MS-SSIM+VGG | diverged | – | – | ❌ Failed |
-| **v19b** ⭐ | **DenseUNet + ResNet-34** | **None** | **Top-1k full** | **L1 only** | **0.7489** | **–** | **–** | **PROJECT BEST** |
-| v20* | + MS-SSIM + VGG perceptual | None | Top-1k full | L1+MS-SSIM+VGG | 0.77+ predicted | – | – | Recommended |
+| v19b | DenseUNet + ResNet-34 | None | Top-1k full | L1 only | 0.7489 | – | – | Historical leaky split |
+| v20 | ConvNeXt-Base LAION-2B U-Net | None | Top-1k full | L1 + elastic aug | 0.7549 | – | – | Historical leaky split |
+| **v20_fixed** ⭐ | **ConvNeXt-Base LAION-2B U-Net** | **None** | **Top-1k full, clean 900/100** | **L1 + elastic aug** | **0.7606** | **24.92** | **0.8652** | **Clean best single model** |
+| v21A | Hibou-B frozen features + decoder | None | Same clean split | L1 + elastic aug | 0.7605 | 24.77 | 0.8634 | Matched v20, did not beat |
+| v20/v21A ensemble | 55/45 weighted TTA ensemble | None | Same clean validation | Inference only | **0.7649** | **25.11** | **0.8710** | Best validation setup, 2-model cost |
+| v22A | v20 warm-start ConvNeXt U-Net | None | content-quality CLAHE top-1000 | L1 + elastic aug | 0.7655 internal; 0.7807 fixed CLAHE TTA | 25.16 fixed CLAHE TTA | 0.8782 fixed CLAHE TTA | Best single CLAHE model |
+| v21B | Hibou-B warm-start | None | content-quality CLAHE top-1000 | L1 + elastic aug | 0.7544 internal; 0.7790 fixed CLAHE TTA | 24.27 fixed CLAHE TTA | 0.8598 fixed CLAHE TTA | Helpful ensemble member |
+| **Final ensemble** ⭐ | `0.20*v20 + 0.60*v22A + 0.20*v21B` TTA4 | None | CLAHE same-prefix fixed validation | Inference only | **0.7838** | **25.16** | **0.8794** | **Best current pipeline** |
 
-*v20 is hypothetical (recommended next step).
+Historical leaky split means train/val prefixes overlapped. v20_fixed uses a single seed-42 split and asserts `overlap=0`. v22A/v21B internal validation splits are content-quality based, so the final claim uses fixed same-prefix evaluation in `logs/final_v21b_v22a_eval_summary.txt`.
+
+### Final Fixed Evaluation Summary
+
+| Fixed Eval Set | Best Method | SSIM | PSNR | PCC |
+|---|---|---:|---:|---:|
+| Old registered | v20 TTA4 | 0.7634 | 25.03 | 0.8684 |
+| CLAHE same-prefixes | `0.30*v20 + 0.50*v22A + 0.20*v21B` TTA4 | **0.7838** | 25.08 | 0.8789 |
+| CLAHE same-prefixes | `0.20*v20 + 0.60*v22A + 0.20*v21B` TTA4 | **0.7838** | **25.16** | **0.8794** |
 
 ---
 
@@ -32,7 +46,7 @@
 
 ```
 0.80 ┤
-0.75 ┤                                                            ⭐ v19b (0.7489)
+0.75 ┤                                                            v19b/v20(leaky) ─ ⭐ v20_fixed (0.7606)
 0.70 ┤                          v11 ──── v14 ── v15 ─────────────┘
 0.65 ┤              v8─v9─v10 ──┘          v13          v16
 0.60 ┤
@@ -44,7 +58,7 @@
 0.30 ┤                                                       v17r2↑
 0.25 ┤  v1-7 ──┐
      └─────────┴────────┴────────┴────────┴────────┴────────┴────────
-       Phase1  Phase2   Phase3   Phase4   Phase5   Phase6   v17  v19b
+       Phase1  Phase2   Phase3   Phase4   Phase5   Phase6   v17  v19b/v20
        (UnReg) (Reg)    (Percept)(HED)   (DataExp) (Stable)
 ```
 
@@ -61,6 +75,28 @@
 | **Δ from registration** | **+0.39 (150% gain)** |
 
 **Verdict:** Registration is the single most impactful upgrade in the entire project.
+
+### Ablation 1B: CLAHE Registration Rerun
+
+| Registration Dataset | All-Pair Mean SSIM | Top-1000 Mean SSIM | Top-1000 Cutoff | Notes |
+|----------------------|--------------------|--------------------|-----------------|-------|
+| Old gray TV-L1 | 0.4134 | 0.6094 | 0.5363 | original registration dataset |
+| CLAHE TV-L1 | **0.5045** | **0.6423** | **0.5877** | full 8,885-pair rerun |
+| Δ | **+0.0911** | **+0.0329** | **+0.0514** | largest gain in noisy/mid-quality pairs |
+
+**Verdict:** CLAHE TV-L1 materially improves pair registration quality. Because 80/8885 pairs had negative gain, training CSVs should prefer positive-only or best-of-old-vs-CLAHE variants when possible.
+
+### Ablation 1C: Content-Aware Pair Selection
+
+The foreground tissue mask did not help because these 1024px patches are almost entirely tissue. Edge/content-aware scoring was useful because it selected high-information nuclei/texture regions and changed top-K membership.
+
+| Top-1000 Selector | Mean Full RGB SSIM | Mean Content-Gray SSIM | Mean Content Fraction | Mean Gain vs Old | Negative Gain Rows | Slides |
+|-------------------|--------------------|-------------------------|-----------------------|------------------|--------------------|--------|
+| Full-SSIM CLAHE top1000 | **0.6423** | not computed in this table | not computed in this table | +0.0371 | 28 | 13 |
+| Content-gray top1000 | 0.5778 | **0.6300** | 0.5289 | +0.0966 | some | 13 |
+| Content-quality minRGB0.50 positive top1000 | 0.5601 | 0.6223 | **0.5516** | **+0.1152** | **0** | 13 |
+
+**Interpretation:** Full-SSIM top1000 is easiest and highest in full-image SSIM. Content-quality top1000 is richer and has larger registration gain, but it is a harder training/validation distribution. The correct comparison is model performance on a fixed external validation set.
 
 ---
 
@@ -139,7 +175,7 @@
 
 ## 4. Convergence Profiles
 
-### v11 (Best Model) — Stable Convergence
+### v11 (Historical Best Model) — Stable Convergence
 
 | Epoch | Train SSIM | Val SSIM | Notes |
 |-------|-----------|----------|-------|
@@ -250,14 +286,12 @@ Reported SSIM in published virtual H&E staining work (approximate, varies by dat
 
 | Improvement | Expected Δ SSIM | Cumulative |
 |-------------|----------------|-----------|
-| Current best (v11) | – | 0.712 |
-| + Direct SSIM optimization (v17 — but warm-start failed) | – | 0.712 (no gain; v17 abandoned) |
-| + ResNet-34 ImageNet encoder (v18) | +0.01 | 0.742 |
-| + MS-SSIM loss (v18) | +0.015 | 0.757 |
-| + Progressive training (256→512→1024) | +0.01 | 0.767 |
-| + Better registration (SyN local refine) | +0.02 | 0.787 |
-| + Larger curated dataset (top-3000) | +0.015 | 0.802 |
-| + Self-distillation / ensemble | +0.02 | 0.822 ✅ |
+| Old registered clean baseline single model (v20_fixed) | – | 0.7606 |
+| Old registered v20 TTA4 | +0.0028 | 0.7634 observed |
+| CLAHE/content-quality v22A TTA4 | +0.0173 vs old v20 TTA4 | 0.7807 observed |
+| Final CLAHE v20/v22A/v21B TTA4 ensemble | +0.0031 vs v22A TTA4 | 0.7838 observed |
+| Larger curated top-K / best-of data policy | +0.003-0.010 | 0.787-0.794 target |
+| Self-distillation / larger clean set | +0.005-0.020 | 0.792-0.814 target |
 
 **Total predicted:** ~0.82 SSIM with cumulative improvements.
 
@@ -267,8 +301,15 @@ Reported SSIM in published virtual H&E staining work (approximate, varies by dat
 
 | File | Purpose |
 |------|---------|
-| `src/training/lightning_module_v11.py` | Best model implementation |
+| `best_stain_app.py` | Final app for v20/v22A/v21B inference |
+| `best_model_manifest.json` | Final model weights, modes, scores, and runtime notes |
+| `APP_DISTRIBUTION.md` | App run/build/distribution handoff |
+| `logs/final_v21b_v22a_eval_summary.txt` | Final fixed-eval aggregate metrics |
+| `logs/final_v21b_v22a_eval_per_pair.csv` | Final per-pair metric log |
+| `src/training/lightning_module_v11.py` | Historical v11 implementation |
 | `train_v14.py` | Simple baseline |
-| `train_v17.py` | Current SOTA attempt |
+| `train_v20.py` | v20_fixed clean baseline run |
+| `logs/v20_fixed_training.log` | v20_fixed clean validation metrics |
+| `v20_stain_app.py` | Legacy/simple inference app for v20-style checkpoints |
 | `data/processed/registered_pairs_all.csv` | All metrics data |
-| `checkpoints/ws-epoch=27-val_ssim=0.712.ckpt` | v11 best weights |
+| `checkpoints/ws-epoch=27-val_ssim=0.712.ckpt` | v11 historical baseline weights |

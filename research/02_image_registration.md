@@ -1,6 +1,6 @@
 # 02: Image Registration — All Methods Evaluated
 
-> **Bottom Line:** TV-L1 Optical Flow was selected. It provided +72% SSIM gain (0.366 → 0.632) by computing dense pixel-level deformation fields, handling the non-rigid warping of tissue during chemical staining.
+> **Bottom Line:** TV-L1 Optical Flow was selected historically, and the current best version is CLAHE-driven TV-L1. CLAHE TV-L1 improved all-pair registration mean SSIM from 0.4134 to 0.5045 and enabled the final CLAHE ensemble score of SSIM 0.7838. The old registered path remains useful for the v20 TTA4 fallback.
 
 ---
 
@@ -135,7 +135,55 @@ v, u = optical_flow_tvl1(reference_image, target_image)
 | MSE (Error) | 0.0649 | **0.0113** | **-82.6%** |
 | Mutual Information | 0.1583 | **0.5998** | **+278%** |
 
-**Verdict:** ✅ **SELECTED as primary registration method.**
+**Verdict:** ✅ **SELECTED as original primary registration method.**
+
+---
+
+### 2.3B. CLAHE-Driven TV-L1 — Current Best Registration Dataset
+
+**Motivation:** Gray TV-L1 estimates motion from raw grayscale intensity. In this project, raw grayscale is a weak registration driver because the fixed image is H&E-stained and the moving image is unstained. Brightness and stain appearance differ even where tissue morphology matches, so the optical-flow solver can follow stain-domain contrast rather than nuclei/tissue structure.
+
+**Change:** Before computing TV-L1 flow, both images are converted to grayscale and passed through CLAHE (Contrast Limited Adaptive Histogram Equalization). CLAHE is used only to estimate the flow field. The saved registered pair still contains the original RGB stained image and the original RGB unstained image warped by the CLAHE-derived flow.
+
+```python
+gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+driver = clahe.apply(gray).astype(np.float32) / 255.0
+v, u = optical_flow_tvl1(stained_driver, unstained_driver)
+warped_rgb = warp_rgb(unstained_rgb, v, u)
+```
+
+**Controlled Ablation Before Full Rerun:**
+
+| Test | Samples | Best Variant | Result |
+|------|---------|--------------|--------|
+| 512px screening | 8 tiered samples | CLAHE TV-L1 | Only candidate worth pursuing; edge-only and gray-at-512 worsened |
+| Full-res selected | 8 tiered samples | CLAHE / CLAHE+prefilter | Mean gain about +0.049 SSIM; won 8/8 |
+| Full-res larger check | 40 tiered samples | CLAHE default | Mean gain +0.0562 SSIM; won 38/40 |
+
+**Full Dataset Rerun (`registration_pipeline_clahe.py`):**
+
+| Metric | Old Gray TV-L1 | CLAHE TV-L1 | Δ |
+|--------|----------------|-------------|---|
+| All-pair mean SSIM | 0.4134 | **0.5045** | **+0.0911** |
+| Median SSIM | 0.3893 | **0.4948** | **+0.1055** |
+| Top-1000 mean SSIM | 0.6094 | **0.6423** | **+0.0329** |
+| Top-1000 cutoff | 0.5363 | **0.5877** | **+0.0514** |
+| Max SSIM | 0.7463 | **0.7509** | +0.0046 |
+| Negative-gain files | n/a | 80/8885 | 0.90% |
+
+**Interpretation:** CLAHE improves registration most where raw gray TV-L1 struggled. On the full dataset the mean pair gain is +0.0911 SSIM, but the top-1000 gain is smaller because the old top-1000 already consisted of easier high-quality pairs. This is still valuable: the top-1000 cutoff moved from 0.5363 to 0.5877 while preserving all 13 slide sources.
+
+**Outputs:**
+- `registration_pipeline_clahe.py` — full CLAHE TV-L1 registration pipeline
+- `data/processed/registered_clahe/` — registered RGB image pairs
+- `data/processed/registered_clahe_pairs_all.csv` — all scored CLAHE pairs
+- `logs/registration_clahe_per_pair.csv` — live per-pair SSIM, old SSIM, and delta
+- `data/processed/training_csv_variants/` — top-K, positive-only, and best-of-old-vs-CLAHE training CSVs
+
+**Best-of Safety:** Because 0.90% of files worsened under CLAHE, the safest top-K variant is not always pure CLAHE. The `registered_bestof_old_clahe_topK` CSVs fall back to the old gray TV-L1 pair when old SSIM is higher. For top-1000, the best-of CSV uses 968 CLAHE pairs and 32 old fallbacks.
+
+**Verdict:** ✅ **Current best registration dataset for training ablations.** Use CLAHE top-K and best-of top-K for model training comparisons. Do not delete the old gray TV-L1 dataset because it remains useful for best-of fallback and historical comparison.
 
 ---
 
@@ -161,7 +209,7 @@ warped = reg['warpedmovout'].numpy()
 - ✗ **Slower than TV-L1** (~10-30 sec per pair vs 2-3 sec)
 - ✗ **Less robust at large displacements** (>50 pixels)
 
-**Comparison Test (16-window grid, 4×4, 256px windows on `AS-5198-23-Z35_patch_16384_23552`):**
+**Initial Comparison Test (16-window grid, 4×4, 256px windows on `AS-5198-23-Z35_patch_16384_23552`):**
 
 | Method | Mean SSIM | Notes |
 |--------|-----------|-------|
@@ -171,20 +219,31 @@ warped = reg['warpedmovout'].numpy()
 
 **Insight:** SyN is **better at small windows** (where displacements are small and local), but **TV-L1 is better at full resolution** (where displacements can be large).
 
+**2026-05-01 Controlled Evidence Update:**
+Later saved comparison files do **not** currently justify replacing TV-L1:
+
+| Saved Result | TV-L1 Mean SSIM | SyN Mean SSIM | Winner |
+|--------------|-----------------|---------------|--------|
+| `syn_test_results/syn_vs_tv_results.csv` | 0.5756 | 0.5313 | TV-L1 |
+| `window_test_results/windowed_comparison.csv` | 0.6667 | 0.5128 | TV-L1 on all 16 windows |
+
+This means SyN/windowed SyN should not replace TV-L1. The current best path is still TV-L1-style dense optical flow, but with CLAHE-preprocessed driver images rather than raw grayscale drivers.
+
 **Implementation Files:**
 - `test_syn.py` — Single pair full-resolution comparison
 - `window_test_syn_tv.py` — Windowed grid comparison
 
-**Verdict:** ⚠️ **Not adopted as primary**, but identified as potentially useful for **patch-based fine-tuning** in future work. TV-L1 retained as primary because:
+**Verdict:** ⚠️ **Not adopted as primary**. TV-L1-style optical flow retained because:
 1. Full-image registration is the primary need
 2. TV-L1 is 5-10× faster
 3. Pipeline is already validated end-to-end
+4. Latest saved SyN/windowed comparisons do not beat TV-L1
 
 ---
 
 ## 3. Final Pipeline Architecture
 
-The production registration pipeline (`registration_pipeline.py`):
+The original production registration pipeline (`registration_pipeline.py`):
 
 ```python
 def register_pair(stained_path, unstained_path):
@@ -212,13 +271,15 @@ def register_pair(stained_path, unstained_path):
     return u_warped, ssim_score
 ```
 
-**Parallelization:** `ProcessPoolExecutor` with 60 workers reduces 8,885-pair processing time from ~12 hours to ~25 minutes on the A100 server.
+**Parallelization:** The original gray TV-L1 pipeline used up to 60 workers. The full CLAHE TV-L1 rerun used 56 workers and completed 8,885 pairs in 93.5 minutes while writing per-pair SSIM logs.
 
 **Output Files:**
 - `data/processed/registered/stained/` — Stained (unchanged)
 - `data/processed/registered/unstained/` — Warped to align with stained
 - `data/processed/registered_pairs_all.csv` — All pairs with SSIM scores
 - `data/processed/registered_pairs.csv` — Top-2000 highest SSIM pairs
+- `data/processed/registered_clahe_pairs_all.csv` — All CLAHE TV-L1 pairs with SSIM scores
+- `logs/registration_clahe_per_pair.csv` — CLAHE per-pair SSIM, old SSIM, delta, and status
 
 ---
 
@@ -226,11 +287,48 @@ def register_pair(stained_path, unstained_path):
 
 | Pair Quality Tier | Count | SSIM Range |
 |-------------------|-------|------------|
-| Top 1,000 | 1000 | 0.5363 - 0.7463 (mean 0.6094) |
-| Top 2,000 | 2000 | 0.5000+ |
-| All registered | 8885 | 0.20 - 0.7463 (mean 0.42) |
+| Old gray TV-L1 top 1,000 | 1000 | 0.5363 - 0.7463 (mean 0.6094) |
+| CLAHE TV-L1 top 1,000 | 1000 | 0.5877 - 0.7509 (mean 0.6423) |
+| CLAHE TV-L1 top 1,500 | 1500 | 0.5564 - 0.7509 (mean 0.6185) |
+| CLAHE TV-L1 top 2,000 | 2000 | 0.5376 - 0.7509 (mean 0.6004) |
+| CLAHE TV-L1 all registered | 8885 | 0.1719 - 0.7509 (mean 0.5045) |
 
-**Used for training:** Top 1,000-2,000 pairs (varies by experiment).
+**Used for training:** Top 1,000-2,000 pairs (varies by experiment). Current candidate CSVs include pure CLAHE top-K, positive-gain-only top-K, best-of-old-vs-CLAHE top-K, content-ranked top-K, and content-quality top-K.
+
+---
+
+## 4.1. Content-Aware Post-Registration Scoring
+
+After the CLAHE rerun, a post-process scorer (`score_registration_tissue.py`) tested whether pair selection should consider tissue richness, not only full-image SSIM.
+
+**Foreground tissue mask result:** Not useful on the first 1,000 completed files because the patches were essentially all tissue (`tissue_fraction = 1.0000`). Tissue-only SSIM was therefore nearly identical to full-image SSIM.
+
+**Content/edge mask result:** Useful. A high-information mask based on Sobel/edge content selected about half the pixels and changed rankings substantially.
+
+| Metric on 1,000-pair test | Value |
+|---------------------------|-------|
+| Mean full RGB SSIM | 0.5209 |
+| Mean content-gray SSIM | 0.5403 |
+| Mean content fraction | 0.5140 |
+| Top-100 overlap: full RGB vs content-gray ranking | 38/100 |
+| Top-500 overlap: full RGB vs content-gray ranking | 364/500 |
+| Correlation: content fraction vs CLAHE gain | 0.698 |
+
+**High-content vs low-content behavior on the 1,000-pair test:**
+
+| Bucket | Mean Old SSIM | Mean CLAHE SSIM | Mean Gain | Mean Content-Gray SSIM |
+|--------|---------------|-----------------|-----------|------------------------|
+| Low-content quartile | 0.5165 | 0.5892 | +0.0727 | 0.5217 |
+| High-content quartile | 0.3596 | 0.4949 | +0.1353 | 0.5531 |
+
+**Interpretation:** High-content patches are harder and have lower full-image SSIM, but they benefited more from CLAHE registration. This supports training data variants that select for both final registration quality and high tissue/texture content rather than only full-image SSIM.
+
+**Full content-quality outputs:**
+- `data/processed/registered_clahe_content_scores.csv`
+- `data/processed/content_ranked_csvs/`
+- `data/processed/content_quality_csvs/`
+
+The recommended content-quality top-1000 CSV is `data/processed/content_quality_csvs/content_quality_minrgb0.50_positive_top1000.csv`: all 13 slides, mean full RGB SSIM 0.5601, mean content-gray SSIM 0.6223, mean content fraction 0.5516, mean gain +0.1152, and no negative-gain rows.
 
 ---
 
@@ -252,7 +350,11 @@ def register_pair(stained_path, unstained_path):
 
 | File | Purpose |
 |------|---------|
-| `registration_pipeline.py` | Production TV-L1 pipeline (parallel, with inline SSIM) |
+| `registration_pipeline.py` | Original gray TV-L1 pipeline (parallel, with inline SSIM) |
+| `registration_pipeline_clahe.py` | Current CLAHE TV-L1 registration pipeline |
+| `score_registration_tissue.py` | Post-registration tissue/content-aware scoring |
+| `make_registration_training_csvs.py` | Pure CLAHE, positive-only, and best-of training CSV generator |
+| `make_content_quality_csvs.py` | Combined high-content/high-SSIM CSV generator |
 | `test_syn.py` | SyN single-image evaluation script |
 | `window_test_syn_tv.py` | SyN vs TV-L1 windowed comparison |
 | `data/processed/registered_pairs_all.csv` | Full registration metadata (8,885 rows) |

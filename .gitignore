@@ -7,7 +7,9 @@ checkpoints*/
 # Logs & metrics
 lightning_logs/
 runs/
-logs/
+logs/*
+!logs/final_v21b_v22a_eval_summary.txt
+!logs/final_v21b_v22a_eval_per_pair.csv
 *.log
 
 # Data
@@ -23,6 +25,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv*/
 *.egg-info/
 dist/
 build/
@@ -30,6 +33,7 @@ build/
 # IDE
 .vscode/
 .idea/
+.claude/
 *.swp
 
 # OS
@@ -44,3 +48,6 @@ v7*.log
 v7*.pid
 
 dataset
+
+# External/local research checkouts
+TransPath/

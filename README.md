@@ -1,4 +1,54 @@
-# State-of-the-Art Virtual H&E Staining Pipeline
+# Virtual H&E Staining - Current Final Baseline
+
+## Final Result (2026-05-02)
+
+The current best pipeline is:
+
+```text
+CLAHE TV-L1 registration -> TTA4 -> weighted v20/v22A/v21B ensemble
+```
+
+Best fixed CLAHE validation result:
+
+| Pipeline | SSIM | PSNR | PCC |
+|---|---:|---:|---:|
+| `0.30*v20 + 0.50*v22A + 0.20*v21B`, all TTA4 | **0.7838** | 25.08 | 0.8789 |
+| `0.20*v20 + 0.60*v22A + 0.20*v21B`, all TTA4 | **0.7838** | **25.16** | **0.8794** |
+| v22A TTA4 only | 0.7807 | 25.16 | 0.8782 |
+| v21B TTA4 only | 0.7790 | 24.27 | 0.8598 |
+| v20 TTA4 on CLAHE set | 0.7759 | 23.70 | 0.8600 |
+
+On the old registered validation set, the best remains `v20_tta4`: **SSIM 0.7634 / PSNR 25.03 / PCC 0.8684**. Do not use v22A/v21B as a drop-in replacement for the old registered input distribution.
+
+Current app:
+
+```bash
+python best_stain_app.py
+```
+
+The app defaults to the balanced ensemble (`0.20*v20 + 0.60*v22A + 0.20*v21B`) because it ties best SSIM and gives the best PSNR/PCC.
+
+CLI example:
+
+```bash
+python best_stain_app.py --input path/to/unstained.tif --output virtual_he.png
+```
+
+Final artifacts:
+
+```text
+SCRIPT_INDEX.md
+APP_DISTRIBUTION.md
+best_model_manifest.json
+logs/final_v21b_v22a_eval_summary.txt
+logs/final_v21b_v22a_eval_per_pair.csv
+```
+
+The older v11 Pix2Pix/GAN documentation below is retained as project history. It is no longer the current best.
+
+---
+
+# Historical Virtual H&E Staining Pipeline
 
 This repository contains a professional-grade generative pipeline for transforming unstained histology patches into high-fidelity H&E stained images. It utilizes **TV-L1 Optical Flow Registration** and a **Weakly Supervised Perceptual GAN** to achieve clinical-grade structural accuracy.
 
@@ -31,11 +81,11 @@ We explored multiple training tracks to identify the most effective architecture
 *   **Result:** SSIM 0.706 | PSNR 22.7 dB.
 *   **Verdict:** Significant Success. This established that registration is the key to medical GAN stability.
 
-#### 3. Weakly Supervised Hybrid (Research Track) — **CURRENT BEST**
+#### 3. Weakly Supervised Hybrid (Research Track) — **Historical v11 Baseline**
 *   **Approach:** Pix2Pix + VGG-19 Perceptual Loss + Sobel Edge Loss.
 *   **Logic:** Uses a pre-trained VGG-19 network to match **Feature Maps** (shapes/textures) rather than raw pixels.
 *   **Result:** **SSIM 0.712 | PSNR 23.03 dB | PCC 0.8906**.
-*   **Verdict:** This is the most biologically accurate model, correlating 89% of generated textures with real tissue architecture.
+*   **Verdict:** Historical milestone only. The current final CLAHE ensemble reaches **SSIM 0.7838 / PSNR 25.16 / PCC 0.8794**.
 
 #### 4. Macenko Normalization Track (Path B)
 *   **Approach:** Standardizing all stained colors to a reference shade before training.
@@ -60,7 +110,7 @@ The pipeline is designed to be **Forward-Compatible**. When you move from your c
 
 ## 🚀 Quick Start: The Research Workflow
 
-Follow these steps to replicate our best results (SSIM 0.712) or to scale the project with new data.
+Follow these historical steps to replicate the earlier v11 result (SSIM 0.712). For the current final app and metrics, use `best_stain_app.py` and the final ensemble artifacts listed at the top of this README.
 
 ### 1. Environment Setup (GPU Acceleration)
 This pipeline is optimized for **NVIDIA RTX GPUs** and **Python 3.13**. To enable CUDA on Windows for this version of Python, you must use the nightly builds:
@@ -92,12 +142,17 @@ python train_weakly_supervised.py
 *   **Early Stopping:** Automatically saves the best model and stops when convergence is reached.
 
 ### 4. Phase 3: Desktop Inference App
-To test the results visually on any unstained image:
+For the current best app:
+```powershell
+python best_stain_app.py
+```
+
+For the legacy v11-era app:
 ```powershell
 python app.py
 ```
-*   The app automatically loads the best model from `checkpoints_weakly_supervised/`.
-*   Supports **CUDA acceleration** for near-instant staining.
+*   The legacy app automatically loads the best model from `checkpoints_weakly_supervised/`.
+*   Current deployment should prefer `best_stain_app.py` or `v20_stain_app.py`.
 
 ---
 
@@ -105,11 +160,11 @@ python app.py
 
 To write a high-impact research paper, we utilize these three biological metrics:
 
-| Metric | Biological Meaning | Our Current Best (1k images) |
+| Metric | Biological Meaning | Current Final Best |
 | :--- | :--- | :--- |
-| **SSIM** | **Structural Fidelity:** Did we put the nucleus in the right spot? | **0.7120** |
-| **PSNR** | **Digital Fidelity:** Is the "painting" clean and noise-free? | **23.03 dB** |
-| **PCC** | **Correlation:** Does the AI accurately map gray textures to purple stains? | **0.8906** |
+| **SSIM** | **Structural Fidelity:** Did we put the nucleus in the right spot? | **0.7838** |
+| **PSNR** | **Digital Fidelity:** Is the "painting" clean and noise-free? | **25.16 dB** |
+| **PCC** | **Correlation:** Does the AI accurately map gray textures to purple stains? | **0.8794** |
 
 ---
 
@@ -123,7 +178,8 @@ Our research indicates that the current architecture is data-limited. By expandi
 
 ## 📂 Project Structure
 *   `registration_pipeline.py`: Parallel TV-L1 registration engine.
-*   `train_weakly_supervised.py`: The primary SOTA training script (v11).
+*   `best_stain_app.py`: The current final v20/v22A/v21B ensemble app.
+*   `train_weakly_supervised.py`: Historical v11 training script.
 *   `src/models/gan.py`: Corrected U-Net & PatchGAN architectures.
 *   `src/models/losses.py`: VGG-19 Perceptual Loss implementation.
 *   `PROGRESS_REPORT.md`: Detailed technical history of all experiments.
@@ -131,4 +187,4 @@ Our research indicates that the current architecture is data-limited. By expandi
 ---
 **Author:** Nishant-IITH  
 **Project:** Capstone Virtual Staining  
-**Status:** Pilot Study Complete (SSIM 0.712). Ready for Large-Scale Validation.
+**Status:** Final CLAHE ensemble baseline complete (SSIM 0.7838). Ready for larger-data validation toward SSIM 0.82+.

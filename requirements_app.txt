@@ -1,0 +1,8 @@
+numpy
+pillow
+timm==1.0.22
+segmentation-models-pytorch==0.5.0
+transformers
+huggingface-hub
+safetensors
+tokenizers

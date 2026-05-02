@@ -14,7 +14,7 @@ from pathlib import Path
 import app_inference as infer
 
 # ── Constants ──────────────────────────────────────────────────────────────────
-APP_TITLE      = "Virtual H&E Stain Generator"
+APP_TITLE      = "Virtual H&E Stain Generator (Legacy v11)"
 APP_VERSION    = "1.0.0"
 WINDOW_W       = 900
 WINDOW_H       = 600
@@ -253,7 +253,7 @@ class App(tk.Tk):
 
         device_label = f"Device: {'CUDA (GPU)' if device == 'cuda' else 'CPU'}"
         self._device_label.config(text=device_label, foreground="green" if device == "cuda" else "orange")
-        self._status_var.set(f"Model ready  |  {device_label}  |  SSIM 0.2696")
+        self._status_var.set(f"Legacy v11 model ready  |  {device_label}  |  SSIM 0.712 milestone")
 
         if self._input_image is not None:
             self._run_btn.config(state=tk.NORMAL)
@@ -374,7 +374,7 @@ class App(tk.Tk):
         self._save_btn.config(state=tk.NORMAL)
         self._run_btn.config(state=tk.NORMAL)
         self._is_busy = False
-        self._status_var.set("Done — 256×256 RGB  |  SSIM 0.2696 (TTA)  |  Click 'Save Output' to export")
+        self._status_var.set("Done - legacy v11 output  |  Current best uses best_stain_app.py")
 
     def _on_inference_error(self, message: str):
         self._run_btn.config(state=tk.NORMAL)
@@ -391,11 +391,11 @@ class App(tk.Tk):
             f"{APP_TITLE}  v{APP_VERSION}\n\n"
             f"Converts unstained tissue images to virtual H&E stained images\n"
             f"using a WGAN-GP generative adversarial network.\n\n"
-            f"Model:      v7  (epoch 22)\n"
-            f"SSIM:       0.2696 (with TTA)\n"
+            f"Model:      Historical v11 weakly supervised checkpoint\n"
+            f"SSIM:       0.712 validation milestone\n"
             f"Device:     {device_str}\n"
             f"Checkpoint: {CKPT_FILENAME}\n\n"
-            f"Check 'Use TTA' for slightly better quality (8× slower).",
+            f"Current best deployment uses best_stain_app.py.",
         )
 
     def _on_close(self):

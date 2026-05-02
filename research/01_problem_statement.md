@@ -1,5 +1,7 @@
 # 01: Problem Statement & Clinical Context
 
+> **2026-05-02 Final Status:** The best current pipeline is CLAHE TV-L1 registration plus weighted TTA ensemble `0.20*v20 + 0.60*v22A + 0.20*v21B`, scoring SSIM 0.7838, PSNR 25.16, PCC 0.8794 on fixed CLAHE same-prefix validation. The old registered pipeline remains best with v20 TTA4 at SSIM 0.7634.
+
 ## 1. Biological Background: H&E Staining
 
 **Hematoxylin & Eosin (H&E) staining** is the foundational histological technique used in pathology worldwide. It is the basis of virtually all cancer diagnoses, biopsy reads, and tissue assessments.
@@ -82,7 +84,8 @@ This is the **single biggest blocker** for paired training:
 Without registration, GAN training penalizes the model for putting the right structure in the *slightly wrong* location, leading to blurry, ambiguous outputs.
 
 **Pre-registration baseline:** SSIM 0.3666 (essentially random)
-**Post-registration baseline:** SSIM 0.6317 (structural floor)
+**Original gray TV-L1 registration:** top-tier structural floor around 0.6317; all-pair mean 0.4134
+**Current CLAHE TV-L1 registration:** all-pair mean 0.5045; top-1000 mean 0.6423
 
 See [02_image_registration.md](02_image_registration.md) for complete analysis.
 
@@ -109,7 +112,7 @@ Multiple model versions (v15, v16) diverged after promising early epochs due to 
 
 ### Challenge 5: Data Quality and Quantity
 
-We have ~8,885 registered pairs total, but registration quality varies wildly. The mean SSIM of all pairs is 0.42, with the top 1,000 averaging 0.61. Training on noisy pairs (low registration SSIM) caps the achievable model quality.
+We have 8,885 registered pairs total, but registration quality varies widely. The old gray TV-L1 dataset had mean SSIM 0.4134 across all pairs and 0.6094 for the top 1,000. The CLAHE TV-L1 rerun improved those to 0.5045 and 0.6423 respectively. Training on noisy pairs still caps model quality, so the current data question is not just "more pairs"; it is which top-K policy best balances registration quality, tissue content, and slide diversity.
 
 ---
 
@@ -118,9 +121,10 @@ We have ~8,885 registered pairs total, but registration quality varies wildly. T
 | Constraint | Value |
 |------------|-------|
 | Hardware | NVIDIA A100 80GB PCIe (single GPU) |
-| Data | 8,885 registered TV-L1 pairs (1024×1024) |
-| Top-1000 quality | Mean SSIM 0.6094, range [0.5363, 0.7463] |
-| Best registered floor | SSIM 0.6317 |
+| Data | 8,885 registered pairs (old gray TV-L1 and new CLAHE TV-L1, 1024×1024) |
+| Old top-1000 quality | Mean SSIM 0.6094, range [0.5363, 0.7463] |
+| CLAHE top-1000 quality | Mean SSIM 0.6423, range [0.5877, 0.7509] |
+| Content-quality top-1000 | Mean full RGB SSIM 0.5601, content-gray SSIM 0.6223, mean gain +0.1152, all 13 slides |
 | Time budget | Real-time experimentation; multi-day training acceptable |
 | Final deployment | Pathology research lab; potential clinical pipeline |
 
@@ -132,22 +136,24 @@ We have ~8,885 registered pairs total, but registration quality varies wildly. T
 |-----------|--------|--------|
 | Milestone 1: TV-L1 Registration | ✅ Complete | 0.63 baseline |
 | Milestone 2: Pix2Pix Foundation | ✅ Complete | 0.706 SSIM |
-| Milestone 3: Weakly Supervised | ✅ Complete | 0.712 SSIM (project best) |
-| Milestone 4: SOTA Upgrades | 🔄 Active | v13-v17 evaluated; v17 failed (0.379); pivoting to v18 |
+| Milestone 3: Weakly Supervised | ✅ Complete | 0.712 SSIM (v11 baseline) |
+| Milestone 4: SOTA Upgrades | ✅ Complete baseline | v20_fixed clean split SSIM 0.7606; old v19b/v20 scores were leaky |
+| Milestone 4b: Data Quality Upgrade | ✅ Complete | CLAHE registration complete; final ensemble SSIM 0.7838 on fixed CLAHE eval |
 | Milestone 5: Clinical Grade | ⏳ Pending | Target SSIM 0.82+ |
 
 ---
 
 ## 6. The Gap to Close
 
-Current best (v11): **0.712**
+Current final ensemble on fixed CLAHE evaluation: **0.7838**
+Current best single model on fixed CLAHE evaluation: **v22A TTA4, 0.7807**
 Target (clinical): **0.82**
-**Gap: 0.108 SSIM**
+**Gap from final ensemble: 0.036 SSIM**
 
 This gap is significant. Closing it likely requires:
-1. Better data (more high-quality registered pairs, possibly SyN registration for finer alignment)
-2. Better loss formulation (direct SSIM/MS-SSIM optimization, perceptual without GAN instability)
-3. Larger model capacity (5-level U-Net, ResNet-34 pretrained encoder)
-4. Smart training (warm-start from v14, progressive resizing 256→512→1024)
+1. Scale CLAHE/content-quality training beyond top-1000 while preserving slide diversity
+2. Evaluate each new data policy on the same fixed external validation set
+3. Keep TTA/checkpoint averaging as a final fixed-eval layer, not as evidence of training improvement
+4. Revisit Hibou/UNI only when the data policy is stable enough for a fair single-model comparison
 
-See [09_future_work.md](09_future_work.md) for the v18+ roadmap.
+See [09_future_work.md](09_future_work.md) for the updated v22+/clinical-scaling roadmap.
